@@ -129,7 +129,7 @@ export class Collector implements DataSource {
   private fetch(): Promise<RawAgent[]> {
     if (this.opts.fetchAgents) return this.opts.fetchAgents();
     if (!this.opts.claudePath) {
-      return Promise.reject(new AgentsCliError("Claude CLI not found. Run `claudette setup`.", "missing"));
+      return Promise.reject(new AgentsCliError("Claude CLI not found. Run `npx get-claudette`.", "missing"));
     }
     return runAgentsCli(this.opts.claudePath);
   }

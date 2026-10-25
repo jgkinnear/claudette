@@ -70,12 +70,16 @@ export const serviceRoot = resolve(here, "..");
 /** Absolute path to the CLI entry point the LaunchAgent / status line should run. */
 export const cliEntry = join(serviceRoot, "dist", "cli.js");
 
+/** First directory that has an index.html: an override, the npm package layout, then the repo layout. */
+function firstSite(override: string | undefined, packaged: string, repo: string): string | null {
+  const candidates = override ? [resolve(override)] : [join(serviceRoot, packaged), resolve(serviceRoot, "..", repo, "dist")];
+  return candidates.find((d) => existsSync(join(d, "index.html"))) ?? null;
+}
+
 export function webDistDir(env: NodeJS.ProcessEnv = process.env): string | null {
-  const dir = env.CLAUDETTE_WEB_DIR ? resolve(env.CLAUDETTE_WEB_DIR) : resolve(serviceRoot, "..", "web", "dist");
-  return existsSync(join(dir, "index.html")) ? dir : null;
+  return firstSite(env.CLAUDETTE_WEB_DIR, "web", "web");
 }
 
 export function simulatorDistDir(env: NodeJS.ProcessEnv = process.env): string | null {
-  const dir = env.CLAUDETTE_SIM_DIR ? resolve(env.CLAUDETTE_SIM_DIR) : resolve(serviceRoot, "..", "simulator", "dist");
-  return existsSync(join(dir, "index.html")) ? dir : null;
+  return firstSite(env.CLAUDETTE_SIM_DIR, "sim", "simulator");
 }

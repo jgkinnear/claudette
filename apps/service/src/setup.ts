@@ -73,7 +73,7 @@ export async function setup(opts: SetupOptions, io: SetupIO): Promise<SetupResul
   say("");
   // ---- checks
   if (platform !== "darwin") {
-    say("! This isn't macOS. Claudette will configure hooks, but you'll need to run `claudette start` yourself,");
+    say("! This isn't macOS. Claudette will configure hooks, but you'll need to run `npx get-claudette start` yourself,");
     say("  and devices will need this computer's address entered manually (no mDNS yet).");
   }
   const nodeMajor = Number(process.versions.node.split(".")[0]);
@@ -180,14 +180,14 @@ export async function setup(opts: SetupOptions, io: SetupIO): Promise<SetupResul
       say("✓ Claudette will start automatically when you log in");
     } else {
       result.launchAgent = "failed";
-      say(`! Couldn't load the LaunchAgent (${r.detail}). You can run \`claudette start\` yourself.`);
+      say(`! Couldn't load the LaunchAgent (${r.detail}). You can run \`npx get-claudette start\` yourself.`);
     }
   }
 
   const url = `http://localhost:${port}`;
   if (result.launchAgent === "installed") {
     const up = await io.waitForHealth(port);
-    say(up ? `✓ Service is up on port ${port}` : `! The service didn't answer yet. Try \`claudette doctor\`.`);
+    say(up ? `✓ Service is up on port ${port}` : `! The service didn't answer yet. Try \`npx get-claudette doctor\`.`);
     if (up && opts.open !== false) await io.openUrl(url);
   }
   say("");

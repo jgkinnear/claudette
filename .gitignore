@@ -44,3 +44,9 @@ test-results/
 *.key
 devices.json
 claudette-state/
+
+# get-claudette build output (published to npm, not committed)
+packages/get-claudette/web/
+packages/get-claudette/sim/
+packages/get-claudette/LICENSE
+*.tgz

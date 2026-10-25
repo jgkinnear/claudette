@@ -10,7 +10,8 @@ used today. It runs on a small ESP32-S3 touchscreen that sits next to your keybo
 - **One UI, two runtimes.** The same LVGL C code runs on the device and in your browser.
 
 **[▶ Try it in your browser](https://jgkinnear.github.io/claudette/)**: the real device UI, compiled to WebAssembly,
-with demo data.
+with demo data. To see your own sessions there, run `npx get-claudette start` on your Mac, choose **Live from my Mac**
+and approve the pairing code at <http://localhost:3333>. No hardware needed.
 
 > Claudette is an unofficial hobby project. It is not affiliated with or endorsed by Anthropic.
 
@@ -27,29 +28,37 @@ with demo data.
 | **Computer** | A Mac with Claude Code installed, [Node.js 22+](https://nodejs.org) and [pnpm](https://pnpm.io) |
 | **Tools** | [PlatformIO Core](https://platformio.org/install/cli) (`brew install platformio`) |
 
-### 1. Get the code
+### 1. Set up your Mac
+
+```bash
+npx get-claudette
+```
+
+This installs the companion service and walks you through setup, which:
+
+- checks for Node and the `claude` CLI, explains what it will read, and asks before changing anything;
+- backs up `~/.claude/settings.json`, then **adds** a few small HTTP hooks (subagent start/stop, questions, plus
+  stop/end for tidying up). It never replaces your existing hooks or status line, and it can offer an optional
+  status line for context % and plan limits;
+- installs a LaunchAgent so the service starts at login (no `sudo`), and opens <http://localhost:3333>.
+
+`npx get-claudette status`, `doctor`, `logs` and `uninstall` are there when you need them. Just want to try it without
+changing anything? `npx get-claudette start` runs it until you close the terminal.
+
+<details>
+<summary>Running from a clone instead</summary>
+
+From the repo (step 2), `pnpm setup:mac` builds the service and runs the same setup from that folder, so keep the
+clone where it is. `pnpm claudette status` and friends work from there.
+</details>
+
+### 2. Get the code
 
 ```bash
 git clone https://github.com/jgkinnear/claudette.git
 cd claudette
 pnpm install
 ```
-
-### 2. Set up your Mac
-
-```bash
-pnpm setup:mac
-```
-
-This builds the companion service and runs `claudette setup`, which:
-
-- checks for Node and the `claude` CLI, explains what it will read, and asks before changing anything;
-- backs up `~/.claude/settings.json`, then **adds** a few small HTTP hooks (subagent start/stop, plus stop/end for tidying up) so it can count subagents. It never replaces your
-  existing hooks or status line, and it can offer an optional status line for context % and plan limits;
-- installs a LaunchAgent so the service starts at login (no `sudo`), and opens <http://localhost:3333>.
-
-The service runs from this folder, so keep the clone where it is. `pnpm claudette status`, `doctor`, `logs` and
-`uninstall` are there when you need them.
 
 ### 3. Flash the display
 
@@ -138,6 +147,8 @@ every few seconds. Details: [docs/architecture.md](docs/architecture.md).
   code, file paths or transcript contents.
 - Displays must be paired with a code you type on the Mac. Tokens are stored hashed, and you can revoke them.
 - The admin page and hook endpoints only answer requests from the Mac itself.
+- The live demo site pairs like a display does, using a code you approve. The service only lets that site (and local dev
+  servers) call the display API from a browser; the admin API never answers browser pages.
 - Display traffic is plain HTTP on your LAN, so use it on networks you trust.
 
 More detail is in [docs/privacy-security.md](docs/privacy-security.md).

@@ -191,6 +191,21 @@ button.on { color: var(--cream); border-color: var(--terracotta); background: rg
 
 .mode button { flex: 1; }
 
+#live-pane > div { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+#live-pane > div[hidden] { display: none; }
+#live-pane a { color: var(--terracotta); }
+.hint.small { font-size: 12.5px; color: var(--muted); }
+.hint.error { color: var(--amber); }
+.cmd { display: flex; gap: 6px; align-items: stretch; }
+.cmd code { flex: 1; padding: 8px 10px; font-size: 13.5px; }
+button.primary { color: var(--cream); border-color: var(--terracotta); background: rgba(217, 119, 87, 0.28); }
+.pair-code {
+  margin: 0;
+  font: 800 30px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.18em;
+  color: var(--cream);
+}
+
 .hint {
   color: var(--cream-dim);
   font-weight: 600;

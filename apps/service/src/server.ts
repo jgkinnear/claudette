@@ -32,6 +32,8 @@ export interface ServerDeps {
   doctor: () => Promise<unknown> | unknown;
   webDir: string | null;
   simDir: string | null;
+  /** Extra browser origins allowed to use the device API (besides PUBLIC_ORIGINS and localhost). */
+  allowedOrigins?: string[];
   /** Tests only: override how the client address is determined. */
   clientAddress?: (req: IncomingMessage) => string;
   now?: () => number;
@@ -47,6 +49,20 @@ class HttpError extends Error {
   ) {
     super(message);
   }
+}
+
+/**
+ * Web pages allowed to use the *device* API from a browser (pairing + reading the dashboard, the same
+ * access a paired display has). Admin and hook routes never answer cross-origin requests.
+ * Forks can add their own with CLAUDETTE_ALLOWED_ORIGINS (comma separated).
+ */
+export const PUBLIC_ORIGINS = ["https://jgkinnear.github.io"];
+
+export function allowedOrigin(origin: string | undefined, extra: string[] = []): string | null {
+  if (!origin) return null;
+  if (PUBLIC_ORIGINS.includes(origin) || extra.includes(origin)) return origin;
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(origin)) return origin; // local dev servers
+  return null;
 }
 
 const BASE_HEADERS: Record<string, string> = {
@@ -469,7 +485,26 @@ export function createHttpServer(deps: ServerDeps): Server {
     }
     const path = url.pathname;
     try {
-      if (req.method === "OPTIONS") throw new HttpError(405, "method not allowed"); // never approve CORS preflight
+      // Browsers: only allowlisted pages, and only for the device API (what a paired display can do).
+      const origin = path.startsWith("/api/v1/") ? allowedOrigin(req.headers.origin, deps.allowedOrigins) : null;
+      if (origin) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Vary", "Origin");
+      }
+      if (req.method === "OPTIONS") {
+        if (!origin) throw new HttpError(405, "method not allowed"); // never approve other preflights
+        res.writeHead(204, {
+          ...BASE_HEADERS,
+          "Access-Control-Allow-Methods": "GET, POST, PATCH",
+          "Access-Control-Allow-Headers": "Authorization, Content-Type",
+          "Access-Control-Max-Age": "600",
+          // Chrome asks before a public site may reach localhost (Private / Local Network Access).
+          ...(req.headers["access-control-request-private-network"] === "true"
+            ? { "Access-Control-Allow-Private-Network": "true" }
+            : {}),
+        });
+        return res.end();
+      }
       if (path.startsWith("/api/v1/")) return await handleDevice(req, res, path, url);
       if (path.startsWith("/admin/")) return await handleAdmin(req, res, path);
       if (path === "/hooks/claude" || path === "/hooks/statusline") return await handleHook(req, res, path);

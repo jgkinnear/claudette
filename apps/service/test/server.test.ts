@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Health, PairRequestResponse, Snapshot } from "@claudette/protocol";
 import { agents, hooks, ids, maliciousNames, statusLinePayload } from "@claudette/test-fixtures";
+import { allowedOrigin } from "../src/server.js";
 import { admin, http, json, startTestService, until, type TestService } from "./helpers.js";
 
 const secretHex = "00112233445566778899aabbccddeeff";
@@ -97,6 +98,56 @@ describe("device API", () => {
     expect(firstCalm.pinned).toBe(true);
     expect((await http(t.port, "PATCH", "/api/v1/preferences", { headers: auth, body: { pins: "nope" } })).status).toBe(400);
     expect((await http(t.port, "PATCH", "/api/v1/preferences", { headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" }, raw: "{}" })).status).toBe(415);
+  });
+});
+
+describe("browser pages (demo site pairing)", () => {
+  const demo = "https://jgkinnear.github.io";
+
+  it("only known origins get CORS, on the device API only", () => {
+    expect(allowedOrigin(demo)).toBe(demo);
+    expect(allowedOrigin("http://localhost:5180")).toBe("http://localhost:5180");
+    expect(allowedOrigin("http://127.0.0.1")).toBe("http://127.0.0.1");
+    expect(allowedOrigin("https://example.com", ["https://example.com"])).toBe("https://example.com");
+    for (const bad of [undefined, "null", "https://evil.example", "https://jgkinnear.github.io.evil.example", "http://localhost.evil.example", "http://192.168.1.5:5180"]) {
+      expect(allowedOrigin(bad)).toBeNull();
+    }
+  });
+
+  it("answers the demo site's preflight, including Private Network Access", async () => {
+    const r = await http(t.port, "OPTIONS", "/api/v1/status", {
+      headers: {
+        Origin: demo,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "authorization",
+        "Access-Control-Request-Private-Network": "true",
+      },
+    });
+    expect(r.status).toBe(204);
+    expect(r.headers["access-control-allow-origin"]).toBe(demo);
+    expect(r.headers["access-control-allow-headers"]).toContain("Authorization");
+    expect(r.headers["access-control-allow-private-network"]).toBe("true");
+  });
+
+  it("refuses other origins and never opens the admin API to pages", async () => {
+    const evil = await http(t.port, "OPTIONS", "/api/v1/status", {
+      headers: { Origin: "https://evil.example", "Access-Control-Request-Method": "GET", "Access-Control-Request-Private-Network": "true" },
+    });
+    expect(evil.status).toBe(405);
+    expect(evil.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(evil.headers["access-control-allow-private-network"]).toBeUndefined();
+    const adminPreflight = await http(t.port, "OPTIONS", "/admin/api/pairing", { headers: { Origin: demo, "Access-Control-Request-Method": "GET" } });
+    expect(adminPreflight.status).toBe(405);
+    const adminGet = await http(t.port, "GET", "/admin/api/pairing", { headers: { Origin: demo } });
+    expect(adminGet.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("a page can pair and read status, and the response is readable cross-origin", async () => {
+    const token = await pair("web-0123456789abcdef");
+    const r = await http(t.port, "GET", "/api/v1/status", { headers: { Origin: demo, Authorization: `Bearer ${token}` } });
+    expect(r.status).toBe(200);
+    expect(r.headers["access-control-allow-origin"]).toBe(demo);
+    expect(r.headers.vary).toContain("Origin");
   });
 });
 

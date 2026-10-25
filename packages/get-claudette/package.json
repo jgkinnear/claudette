@@ -1,0 +1,43 @@
+{
+  "name": "get-claudette",
+  "version": "0.1.0",
+  "description": "Claudette: a tiny desk companion for Claude Code. The Mac companion service, settings page and live simulator. Unofficial; not affiliated with Anthropic.",
+  "type": "module",
+  "bin": {
+    "get-claudette": "dist/get-claudette.js",
+    "claudette": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "web",
+    "sim",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/jgkinnear/claudette#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jgkinnear/claudette.git",
+    "directory": "packages/get-claudette"
+  },
+  "bugs": "https://github.com/jgkinnear/claudette/issues",
+  "keywords": [
+    "claude-code",
+    "esp32",
+    "lvgl",
+    "desk-display",
+    "dashboard",
+    "agents"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepublishOnly": "node scripts/build.mjs --check"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

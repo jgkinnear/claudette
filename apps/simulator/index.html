@@ -51,10 +51,34 @@
         </div>
 
         <div id="live-pane" hidden>
-          <p class="hint" id="live-hint">
-            Shows real sessions from the Claudette service on this computer (<code>http://localhost:3333</code>).
-            Run <code>claudette setup</code> or <code>pnpm dev:service</code> first.
-          </p>
+          <p class="hint" id="live-hint">Shows real sessions from the Claudette service on this computer.</p>
+
+          <div id="live-start" hidden>
+            <p class="hint">Start Claudette on your Mac (needs Node 22+):</p>
+            <div class="cmd"><code id="start-cmd">npx get-claudette start</code><button id="copy-cmd">Copy</button></div>
+            <p class="hint small">
+              Want it to start at login and count subagents too? Run <code>npx get-claudette</code> instead.
+              This page will notice when it's running.
+            </p>
+          </div>
+
+          <div id="live-pair" hidden>
+            <p class="hint">Found Claudette on <b id="pair-host">your Mac</b>. Pair this page like a display:</p>
+            <button id="pair-btn" class="primary">Connect</button>
+          </div>
+
+          <div id="live-code" hidden>
+            <p class="hint">Enter this code at <a id="approve-link" href="http://localhost:3333" target="_blank" rel="noopener">localhost:3333</a>:</p>
+            <p class="pair-code" id="pair-code">------</p>
+            <button id="pair-cancel">Cancel</button>
+          </div>
+
+          <div id="live-on" hidden>
+            <p class="hint small">Paired. This browser keeps a read-only display token; unpair it on your Mac any time.</p>
+            <button id="unpair-btn">Disconnect</button>
+          </div>
+
+          <p class="hint small error" id="live-error" hidden></p>
         </div>
 
         <details class="extras">

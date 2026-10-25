@@ -452,11 +452,11 @@ function App() {
       </div>
     </header>
     ${doctor.data?.info.mode === "mock"
-      ? html`<div class="banner">Demo mode: these sessions are made up. Run <code>claudette start</code> without <code>--mock</code> for the real thing.</div>`
+      ? html`<div class="banner">Demo mode: these sessions are made up. Run <code>npx get-claudette start</code> without <code>--mock</code> for the real thing.</div>`
       : null}
     ${down
       ? html`<div class="banner bad">
-          Claudette's service isn't answering. Try <code>claudette restart</code>, or <code>claudette doctor</code> to see what's up.
+          Claudette's service isn't answering. Try <code>npx get-claudette restart</code>, or <code>npx get-claudette doctor</code> to see what's up.
         </div>`
       : null}
     <main class="grid">

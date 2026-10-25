@@ -172,6 +172,10 @@ export async function startService(opts: StartOptions = {}): Promise<RunningServ
     webDir,
     simDir,
     now,
+    allowedOrigins: (env.CLAUDETTE_ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean),
     ...(opts.clientAddress ? { clientAddress: opts.clientAddress } : {}),
   });
 

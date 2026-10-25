@@ -144,7 +144,7 @@ export function mergeHooks(settings: Settings, opts: { port: number; secret: str
 export interface HooksState {
   /** The subagent hooks point at `port`. */
   installed: boolean;
-  /** The question hooks (PermissionRequest etc.) are there too; older installs need `claudette setup` again. */
+  /** The question hooks (PermissionRequest etc.) are there too; older installs need setup again. */
   questions: boolean;
   events: string[];
   ports: number[];

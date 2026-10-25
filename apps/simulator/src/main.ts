@@ -1,4 +1,5 @@
 import { scenarios, sortSessions, type Scenario, type Snapshot } from "@claudette/protocol";
+import { RemoteService } from "./remote.js";
 
 const W = 320;
 const H = 480;
@@ -277,34 +278,129 @@ for (const sc of scenarios) {
 }
 
 // ---------------------------------------------------------------- live mode
+//
+// Served by the service itself (localhost:3333/sim/) or the Vite dev server (which proxies
+// /admin), the page reads the service's local admin API. Anywhere else, like the public demo
+// site, it pairs with the service on this computer exactly like a display does (remote.ts).
 
+const LOCAL_SERVICE = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/;
+const serviceParam = params.get("service")?.replace(/\/+$/, "");
+const SERVICE = serviceParam && LOCAL_SERVICE.test(serviceParam) ? serviceParam : "http://localhost:3333";
+const remote =
+  serviceParam || !(location.pathname.startsWith("/sim") || import.meta.env.DEV) ? new RemoteService(SERVICE) : null;
+
+type Phase = "find" | "unpaired" | "pairing" | "paired";
+let phase: Phase = "find";
+let pairing: { pairingId: string; secret: string; expires: number } | null = null;
+let liveOn = false;
 let liveTimer: number | undefined;
 let lastOk = 0;
-let liveSnap: Snapshot | undefined;
+let liveHost = "your Mac";
+
+function enter(p: Phase, error?: string) {
+  phase = p;
+  $("live-start").hidden = p !== "find";
+  $("live-pair").hidden = p !== "unpaired";
+  $("live-code").hidden = p !== "pairing";
+  $("live-on").hidden = p !== "paired";
+  $("pair-host").textContent = liveHost;
+  const err = $("live-error");
+  err.hidden = !error;
+  err.textContent = error ?? "";
+  if (p === "find") {
+    setLink(2, 0);
+    call("sim_show_progress", "Looking for your Mac", SERVICE.replace(/^http:\/\//, ""));
+    statusEl.textContent = "Live: waiting for Claudette on this computer";
+  } else if (p === "unpaired") {
+    setLink(2, 0);
+    call("sim_show_progress", `Found ${liveHost}`, "Press Connect to pair");
+    statusEl.textContent = "Live: not paired yet";
+  } else if (p === "pairing") {
+    statusEl.textContent = "Live: waiting for you to approve the code";
+  } else {
+    call("sim_show_dashboard");
+  }
+}
+
+function showLive(s: Snapshot) {
+  lastOk = Date.now();
+  hostLabel = s.host.displayName;
+  pushSnapshot(s);
+  setLink(0, 0);
+  statusEl.textContent = `Live: ${s.sessions.length} session${s.sessions.length === 1 ? "" : "s"}`;
+}
+
+function lostLive(unreachable: string) {
+  const age = lastOk ? (Date.now() - lastOk) / 1000 : 0;
+  setLink(!lastOk || Date.now() - lastOk > OFFLINE_AFTER_MS ? 2 : 1, age);
+  statusEl.textContent = lastOk ? "Live: reconnecting…" : unreachable;
+}
 
 async function pollLive() {
-  try {
-    const res = await fetch("/admin/api/status", { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    liveSnap = (await res.json()) as Snapshot;
-    lastOk = Date.now();
-    hostLabel = liveSnap.host.displayName;
-    pushSnapshot(liveSnap);
-    setLink(0, 0);
-    statusEl.textContent = `Live: ${liveSnap.sessions.length} session${liveSnap.sessions.length === 1 ? "" : "s"}`;
-  } catch {
-    const age = lastOk ? (Date.now() - lastOk) / 1000 : 0;
-    setLink(!lastOk || Date.now() - lastOk > OFFLINE_AFTER_MS ? 2 : 1, age);
-    statusEl.textContent = lastOk ? "Live: reconnecting…" : "Can't reach the Claudette service on this computer";
+  if (!remote) {
+    try {
+      const res = await fetch("/admin/api/status", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      showLive((await res.json()) as Snapshot);
+    } catch {
+      lostLive("Can't reach the Claudette service on this computer");
+    }
+    return;
   }
+  switch (phase) {
+    case "find":
+    case "unpaired": {
+      const host = await remote.running();
+      if (!host) {
+        if (phase !== "find") enter("find");
+        return;
+      }
+      liveHost = host;
+      if (remote.paired) {
+        enter("paired");
+        return pollLive();
+      }
+      if (phase !== "unpaired") enter("unpaired");
+      return;
+    }
+    case "pairing": {
+      if (!pairing) return enter("unpaired");
+      const result = Date.now() > pairing.expires ? "expired" : await remote.completePairing(pairing.pairingId, pairing.secret).catch(() => "pending" as const);
+      if (result === "pending") return;
+      pairing = null;
+      if (result === "approved") enter("paired");
+      else enter("unpaired", result === "denied" ? "The pairing was declined on your Mac." : "That code expired. Connect to get a new one.");
+      return;
+    }
+    case "paired":
+      try {
+        showLive(await remote.status());
+      } catch (e) {
+        if ((e as Error).message === "unpaired") enter("unpaired", "This page was unpaired on your Mac. Connect again to pair.");
+        else {
+          lostLive("Can't reach Claudette on this computer");
+          // Gone for a while: remind them how to start it again.
+          $("live-start").hidden = Date.now() - lastOk < OFFLINE_AFTER_MS;
+        }
+      }
+  }
+}
+
+function scheduleLive() {
+  window.clearTimeout(liveTimer);
+  if (!liveOn) return;
+  liveTimer = window.setTimeout(async () => {
+    await pollLive();
+    scheduleLive();
+  }, phase === "pairing" ? 2000 : POLL_MS);
 }
 
 function startLive() {
   window.clearInterval(demoTimer);
   current = undefined;
+  liveOn = true;
   modeLabel = "Live (this computer)";
   pushDevice();
-  call("sim_show_dashboard");
   $("mode-live").classList.add("on");
   $("mode-demo").classList.remove("on");
   $("live-pane").hidden = false;
@@ -312,13 +408,20 @@ function startLive() {
   params.set("live", "1");
   params.delete("scenario");
   history.replaceState(null, "", `?${params}`);
-  void pollLive();
-  liveTimer = window.setInterval(pollLive, POLL_MS);
+  if (remote) {
+    $("live-hint").textContent = "Shows your real Claude Code sessions. Nothing leaves your computer: this page talks straight to Claudette on localhost.";
+    enter(remote.paired ? "paired" : "find");
+  } else {
+    call("sim_show_dashboard");
+  }
+  void pollLive().then(scheduleLive);
 }
 
 function stopLive() {
-  window.clearInterval(liveTimer);
+  liveOn = false;
+  window.clearTimeout(liveTimer);
   liveTimer = undefined;
+  pairing = null;
   $("mode-live").classList.remove("on");
   $("mode-demo").classList.add("on");
   $("live-pane").hidden = true;
@@ -328,12 +431,44 @@ function stopLive() {
 $("mode-live").addEventListener("click", startLive);
 $("mode-demo").addEventListener("click", () => runScenario(current ?? scenarios[0]!));
 
+($("approve-link") as HTMLAnchorElement).href = `${SERVICE}/`;
+$("approve-link").textContent = SERVICE.replace(/^http:\/\//, "");
+$("copy-cmd").addEventListener("click", () => {
+  void navigator.clipboard?.writeText($("start-cmd").textContent ?? "").then(() => {
+    $("copy-cmd").textContent = "Copied";
+    window.setTimeout(() => ($("copy-cmd").textContent = "Copy"), 1500);
+  });
+});
+$("pair-btn").addEventListener("click", async () => {
+  try {
+    const p = await remote!.requestPairing();
+    pairing = { pairingId: p.pairingId, secret: p.secret, expires: Date.now() + 5 * 60_000 };
+    $("pair-code").textContent = p.code;
+    call("sim_show_pairing", liveHost, p.code);
+    enter("pairing");
+    scheduleLive();
+  } catch (e) {
+    enter("unpaired", (e as Error).message);
+  }
+});
+$("pair-cancel").addEventListener("click", () => {
+  pairing = null;
+  enter("unpaired");
+});
+$("unpair-btn").addEventListener("click", () => {
+  remote?.forget();
+  lastOk = 0;
+  enter("unpaired");
+});
+
 // ---------------------------------------------------------------- platform callbacks
 
 sim.onPlatform = (event, arg, num) => {
   switch (event) {
     case "toggle_pin":
-      if (liveTimer) {
+      if (liveOn && remote) {
+        void remote.setPinned(arg, num === 1).then(pollLive);
+      } else if (liveOn) {
         void fetch("/admin/api/preferences", {
           method: "PATCH",
           headers: { "Content-Type": "application/json", "X-Claudette-Admin": "1" },
@@ -363,7 +498,7 @@ sim.onPlatform = (event, arg, num) => {
       saveLayout(tiles ? "tiles" : "list");
       break;
     case "reconnect":
-      if (liveTimer) void pollLive();
+      if (liveOn) void pollLive();
       break;
     case "select_host": {
       // Walk through the pairing flow, just like the device does.

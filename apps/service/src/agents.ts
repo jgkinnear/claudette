@@ -61,7 +61,7 @@ export function runAgentsCli(claudePath: string, timeoutMs = 4000): Promise<RawA
         if (err) {
           const e = err as NodeJS.ErrnoException & { killed?: boolean; signal?: string | null };
           if (e.code === "ENOENT" || e.code === "EACCES") {
-            return reject(new AgentsCliError("Claude CLI not found. Run `claudette setup` again.", "missing"));
+            return reject(new AgentsCliError("Claude CLI not found. Run `npx get-claudette` again.", "missing"));
           }
           if (e.killed || e.signal === "SIGTERM") {
             return reject(new AgentsCliError("`claude agents` timed out", "timeout"));

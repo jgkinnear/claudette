@@ -56,7 +56,7 @@ export async function staticChecks(paths: Paths, config: Config, opts: { port?: 
     detail: claudePath ? (version ? `v${version}` : "found, but `claude --version` failed") : "not found",
     ...(claudePath && version && compareVersions(version, MIN_CLAUDE_VERSION) >= 0
       ? {}
-      : { fix: `Install or update Claude Code (needs ${MIN_CLAUDE_VERSION}+), then run \`claudette setup\`.` }),
+      : { fix: `Install or update Claude Code (needs ${MIN_CLAUDE_VERSION}+), then run \`npx get-claudette\`.` }),
   });
 
   let settingsOk = true;
@@ -81,7 +81,7 @@ export async function staticChecks(paths: Paths, config: Config, opts: { port?: 
         : stalePorts.length
           ? `installed for port ${stalePorts.join(", ")}, but the service uses ${port}`
           : "not installed: subagent counts are unavailable",
-      ...(hooks.installed ? {} : { fix: "Run `claudette setup` to add them." }),
+      ...(hooks.installed ? {} : { fix: "Run `npx get-claudette` to add them." }),
     });
     checks.push({
       id: "question-hooks",
@@ -90,7 +90,7 @@ export async function staticChecks(paths: Paths, config: Config, opts: { port?: 
       detail: hooks.questions
         ? "installed: displays can show what Claude is asking (Claudette never answers)"
         : "not installed: displays only know that a session needs you",
-      ...(hooks.questions ? {} : { fix: "Run `claudette setup` again to add them." }),
+      ...(hooks.questions ? {} : { fix: "Run `npx get-claudette` again to add them." }),
     });
     checks.push({
       id: "statusline",
@@ -128,7 +128,7 @@ export async function staticChecks(paths: Paths, config: Config, opts: { port?: 
       id: "launchagent",
       label: "Starts at login",
       ok: installed ? true : null,
-      detail: installed ? "LaunchAgent installed" : "not installed (run `claudette setup`)",
+      detail: installed ? "LaunchAgent installed" : "not installed (run `npx get-claudette`)",
     });
   }
   return checks;

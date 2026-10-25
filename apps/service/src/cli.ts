@@ -87,10 +87,27 @@ async function cmdStart(args: string[]): Promise<void> {
   process.on("SIGTERM", shutdown);
 }
 
+/**
+ * `npx get-claudette setup` runs from npm's cache, which npm may clean up later. The LaunchAgent and
+ * status line need a path that lasts, so copy the package into Claudette's own folder first.
+ */
+async function stableCliPath(): Promise<string> {
+  const self = selfPath();
+  if (!/[\\/]_npx[\\/]/.test(self)) return self;
+  const { cpSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { resolvePaths, serviceRoot } = await import("./paths.js");
+  const app = join(resolvePaths().home, "app");
+  rmSync(app, { recursive: true, force: true });
+  cpSync(serviceRoot, app, { recursive: true, filter: (p) => !p.includes(`${serviceRoot}/node_modules`) });
+  console.log(`✓ Installed Claudette to ${app}`);
+  return join(app, "dist", "cli.js");
+}
+
 async function cmdSetup(args: string[]): Promise<void> {
   const { setup } = await import("./setup.js");
   const { realExec } = await import("./launchd.js");
-  const cliPath = selfPath();
+  const cliPath = await stableCliPath();
   const port = portOption(args);
   const r = await setup(
     {
@@ -163,7 +180,7 @@ async function cmdStatus(): Promise<void> {
   }
   const health = await localGet(port, "/api/v1/health");
   if (!health) {
-    console.log("  Service: not running (try `claudette restart` or `claudette start`)");
+    console.log("  Service: not running (try `npx get-claudette restart` or `npx get-claudette start`)");
     process.exitCode = 1;
     return;
   }
@@ -196,7 +213,7 @@ async function cmdDoctor(): Promise<void> {
     return;
   }
   console.log(`✗ Service isn't answering on port ${store.config.port}`);
-  console.log("    → Try `claudette restart`, or `claudette logs` to see why.");
+  console.log("    → Try `npx get-claudette restart`, or `npx get-claudette logs` to see why.");
   const { staticChecks } = await import("./doctor.js");
   printChecks(await staticChecks(paths, store.config));
   process.exitCode = 1;
@@ -237,7 +254,7 @@ async function cmdRestart(): Promise<void> {
   const { paths } = await loadConfig();
   const { existsSync } = await import("node:fs");
   if (process.platform !== "darwin" || !existsSync(paths.launchAgentPlist)) {
-    console.log("Claudette isn't installed as a background service. Run `claudette setup`, or `claudette start` in a terminal.");
+    console.log("Claudette isn't installed as a background service. Run `npx get-claudette`, or `npx get-claudette start` in a terminal.");
     process.exitCode = 1;
     return;
   }
@@ -248,7 +265,9 @@ async function cmdRestart(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const [cmd, ...args] = process.argv.slice(2);
+  // `npx get-claudette` with no command means "set me up" (see the get-claudette entry point).
+  const fallback = (globalThis as { __claudetteDefaultCommand?: string }).__claudetteDefaultCommand;
+  const [cmd = fallback, ...args] = process.argv.slice(2);
   switch (cmd) {
     case "start":
       return cmdStart(args);
