@@ -17,6 +17,7 @@
 
 static uint8_t rgba[W * H * 4];
 static uint16_t draw_buf[W * BUF_LINES];
+static uint16_t rot_buf[W * BUF_LINES];
 static uint32_t now_ms;
 static int dirty = 1;
 static int ptr_x, ptr_y, ptr_down, ptr_latched;
@@ -28,9 +29,12 @@ EM_JS(void, js_platform, (const char *event, const char *arg, int num), {
 
 static uint32_t tick_cb(void) { return now_ms; }
 
-static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
+static void flush_cb(lv_display_t *disp, const lv_area_t *logical, uint8_t *px_map)
 {
-    const uint16_t *src = (const uint16_t *)px_map;
+    /* Same rotation path as the firmware: the framebuffer is always the physical 320x480 panel. */
+    lv_area_t panel;
+    const uint16_t *src = (const uint16_t *)cl_ui_rotate_flush(disp, logical, px_map, (uint8_t *)rot_buf, &panel);
+    const lv_area_t *area = &panel;
     for (int32_t y = area->y1; y <= area->y2; y++) {
         uint8_t *dst = &rgba[(y * W + area->x1) * 4];
         for (int32_t x = area->x1; x <= area->x2; x++) {
@@ -64,6 +68,7 @@ static void on_reconnect(void *u) { (void)u; js_platform("reconnect", NULL, 0); 
 static void on_forget(void *u) { (void)u; js_platform("forget_host", NULL, 0); }
 static void on_reset(void *u) { (void)u; js_platform("factory_reset", NULL, 0); }
 static void on_layout(bool tiles, void *u) { (void)u; js_platform("layout", NULL, tiles); }
+static void on_rotation(uint8_t q, void *u) { (void)u; js_platform("rotation", NULL, q); }
 static void on_message_action(void *u) { (void)u; js_platform("message_action", NULL, 0); }
 
 EMSCRIPTEN_KEEPALIVE uint8_t *sim_framebuffer(void) { return rgba; }
@@ -90,6 +95,7 @@ EMSCRIPTEN_KEEPALIVE void sim_init(uint32_t start_ms)
         .forget_host = on_forget,
         .factory_reset = on_reset,
         .set_layout = on_layout,
+        .set_rotation = on_rotation,
     };
     cl_ui_init(&plat);
     cl_ui_show_dashboard();
@@ -122,7 +128,8 @@ EMSCRIPTEN_KEEPALIVE int sim_set_snapshot(const char *json, int len)
 
 EMSCRIPTEN_KEEPALIVE void sim_set_link(int link, int last_ok_age_s) { cl_ui_set_link((cl_link_t)link, (uint32_t)last_ok_age_s); }
 
-EMSCRIPTEN_KEEPALIVE void sim_set_device(int brightness, int reduce_motion, const char *host, const char *mode, int tiles)
+EMSCRIPTEN_KEEPALIVE void sim_set_device(int brightness, int reduce_motion, const char *host, const char *mode, int tiles,
+                                         int rotation)
 {
     cl_device_info_t info = {
         .firmware_version = "sim-0.1.0",
@@ -134,6 +141,7 @@ EMSCRIPTEN_KEEPALIVE void sim_set_device(int brightness, int reduce_motion, cons
         .reduce_motion = reduce_motion != 0,
         .is_simulator = true,
         .tiles = tiles != 0,
+        .rotation = (uint8_t)rotation,
     };
     cl_ui_set_device_info(&info);
 }

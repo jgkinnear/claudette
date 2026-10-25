@@ -67,6 +67,7 @@ void settings_load(void) {
     g_settings.brightness = p.getUChar("bright", 80);
     g_settings.reduce_motion = p.getBool("rmotion", false);
     g_settings.tiles = p.getBool("tiles", false);
+    g_settings.rotation = p.getUChar("rot", 0) & 3;
     p.end();
 
     if (g_settings.brightness < 5) g_settings.brightness = 5;
@@ -150,6 +151,7 @@ void settings_save_display(void) {
     p.putUChar("bright", g_settings.brightness);
     p.putBool("rmotion", g_settings.reduce_motion);
     p.putBool("tiles", g_settings.tiles);
+    p.putUChar("rot", g_settings.rotation);
     p.end();
 }
 

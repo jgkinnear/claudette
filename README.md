@@ -83,8 +83,14 @@ Wi-Fi), enter your Mac's address manually in the setup page. Recovery, pins and 
   **needs you** (a permission prompt or a question) always comes first, with a pulsing amber card. Pinned sessions are
   next, in your order. They stay listed (as *Stopped*) even after Claude stops their process. Then come working
   sessions, then the rest, most recent first. Your conversation history isn't listed unless it's running or pinned.
-- **List or tiles:** the button next to the gear switches between big cards plus a compact list, and a two-column
-  grid of equal tiles. The display remembers your choice.
+- **List or tiles:** the button next to the gear switches between big cards plus a compact list, and a grid of
+  equal tiles. The display remembers your choice.
+- **Portrait or landscape:** a quick press of the board's **BOOT** button (or Settings → Screen → Rotate) turns the UI a
+  quarter turn at a time (portrait, landscape,
+  and both upside-down variants). In landscape, navigation moves to a rail on the left.
+- **Usage at a glance:** a strip along the bottom shows today's tokens and your 5-hour and weekly limits as bars
+  (the limits need the optional Claudette status line, and Claude Code only runs status lines in the terminal, not
+  the desktop app).
 - **Tap** a session for details. **Long-press** it to pin it to the home screen. Pins only affect Claudette's display and
   never change Claude Code's own pinning.
 - **Every session gets its own Claudette.** Body colour, headwear and extras are picked from a hash of the session,

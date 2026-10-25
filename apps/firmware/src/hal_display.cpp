@@ -11,6 +11,7 @@
 #include <lvgl.h>
 
 #include "board_config.h"
+#include "cl_ui.h"
 #include "log.h"
 
 namespace {
@@ -96,12 +97,18 @@ LGFX_Claudette s_tft;
 lv_display_t *s_disp;
 lv_indev_t *s_indev;
 bool s_single_buffer;
+uint8_t *s_rot_buf; /* rotated copy of one draw buffer (landscape / flipped), internal DMA RAM */
 bool s_touch_log;
 bool s_touch_ok;
 
 uint32_t tick_cb(void) { return millis(); }
 
-void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
+void flush_cb(lv_display_t *disp, const lv_area_t *logical, uint8_t *px_map) {
+    /* Rotation reuses one buffer, so the previous DMA transfer must have finished with it. */
+    if (lv_display_get_rotation(disp) != LV_DISPLAY_ROTATION_0) s_tft.waitDMA();
+    lv_area_t panel;
+    px_map = cl_ui_rotate_flush(disp, logical, px_map, s_rot_buf, &panel);
+    const lv_area_t *area = &panel;
     const uint32_t w = (uint32_t)lv_area_get_width(area);
     const uint32_t h = (uint32_t)lv_area_get_height(area);
 #if LCD_SWAP_BYTES
@@ -194,6 +201,8 @@ bool hal_display_init(uint8_t brightness_pct) {
         LOGI("lcd", "draw buffer alloc failed");
         return false;
     }
+    s_rot_buf = (uint8_t *)heap_caps_aligned_alloc(64, buf_bytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    if (!s_rot_buf) LOGI("lcd", "no rotation buffer: portrait only");
     lv_display_set_buffers(s_disp, buf1, buf2, buf_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(s_disp, flush_cb);
 

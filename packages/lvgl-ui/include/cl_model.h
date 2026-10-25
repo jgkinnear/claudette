@@ -72,7 +72,8 @@ typedef struct {
 
     int64_t tokens;                 /* input + output + cache writes, CL_UNKNOWN if unavailable */
     int64_t cache_read;
-    int8_t context_pct;             /* 0..100 or CL_UNKNOWN */
+    int8_t context_pct;             /* 0..100 or CL_UNKNOWN (needs the Claudette status line) */
+    int64_t context_tokens;         /* tokens in the context window now, CL_UNKNOWN if unavailable */
 
     int32_t last_activity_age_s;
 } cl_session_t;

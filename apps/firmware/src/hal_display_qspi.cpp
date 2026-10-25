@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "board_config.h"
+#include "cl_ui.h"
 #include "log.h"
 
 namespace {
@@ -101,6 +102,7 @@ lv_indev_t *s_indev;
 bool s_touch_ok;
 bool s_touch_log;
 uint8_t s_touch_points = 1;
+uint8_t *s_rot_buf; /* rotated copy of one draw buffer (landscape / flipped), internal DMA RAM */
 
 uint32_t tick_cb(void) { return millis(); }
 
@@ -156,7 +158,10 @@ void rounder_cb(lv_event_t *e) {
     a->y2 |= 3;
 }
 
-void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
+void flush_cb(lv_display_t *disp, const lv_area_t *logical, uint8_t *px_map) {
+    lv_area_t panel;
+    px_map = cl_ui_rotate_flush(disp, logical, px_map, s_rot_buf, &panel);
+    const lv_area_t *area = &panel;
     const uint32_t w = (uint32_t)lv_area_get_width(area);
     const uint32_t h = (uint32_t)lv_area_get_height(area);
     lv_draw_rgb565_swap(px_map, w * h);
@@ -305,6 +310,8 @@ bool hal_display_init(uint8_t brightness_pct) {
         LOGI("lcd", "draw buffer alloc failed");
         return false;
     }
+    s_rot_buf = (uint8_t *)heap_caps_aligned_alloc(64, buf_bytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    if (!s_rot_buf) LOGI("lcd", "no rotation buffer: portrait only");
     lv_display_set_buffers(s_disp, buf1, buf2, buf_bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(s_disp, flush_cb);
     lv_display_add_event_cb(s_disp, rounder_cb, LV_EVENT_INVALIDATE_AREA, nullptr);

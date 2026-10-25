@@ -83,10 +83,15 @@ const debug = {
 // ---------------------------------------------------------------- input
 
 let down = false;
+/** Page coordinates → physical panel pixels (undoing the CSS turn). LVGL then applies its own rotation. */
 function toScreen(e: PointerEvent): [number, number] {
   const r = canvas.getBoundingClientRect();
-  const x = Math.round(((e.clientX - r.left) / r.width) * W);
-  const y = Math.round(((e.clientY - r.top) / r.height) * H);
+  const scale = (rotation % 2 ? r.height : r.width) / W;
+  const dx = (e.clientX - (r.left + r.width / 2)) / scale;
+  const dy = (e.clientY - (r.top + r.height / 2)) / scale;
+  const a = (-90 * rotation * Math.PI) / 180; // inverse of the CSS rotate(90deg * rotation)
+  const x = Math.round(dx * Math.cos(a) - dy * Math.sin(a) + W / 2);
+  const y = Math.round(dx * Math.sin(a) + dy * Math.cos(a) + H / 2);
   return [Math.max(0, Math.min(W - 1, x)), Math.max(0, Math.min(H - 1, y))];
 }
 canvas.addEventListener("pointerdown", (e) => {
@@ -154,10 +159,34 @@ function saveLayout(value: "tiles" | "list") {
     // private mode etc.: the choice just won't stick
   }
 }
+// Screen rotation in quarter turns (0 portrait … 3), remembered like the layout.
+const ROTATION_KEY = "claudette.rotation";
+let rotation = Number(params.get("rotation") ?? readStored(ROTATION_KEY) ?? 0) & 3;
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function store(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // storage unavailable: the choice just won't stick
+  }
+}
+/** Turn the on-page panel so the picture is upright, like a real device turned on its side. */
+const wrap = $("screen-wrap");
+function showRotation() {
+  wrap.classList.toggle("landscape", rotation % 2 === 1);
+  wrap.style.setProperty("--turn", `${90 * rotation}deg`);
+}
 let hostLabel = "Demo MacBook";
 let modeLabel = "Demo mode";
 function pushDevice() {
-  call("sim_set_device", brightness, reduceMotion ? 1 : 0, hostLabel, modeLabel, tiles ? 1 : 0);
+  call("sim_set_device", brightness, reduceMotion ? 1 : 0, hostLabel, modeLabel, tiles ? 1 : 0, rotation);
+  showRotation();
   canvas.style.filter = `brightness(${0.35 + (0.65 * brightness) / 100})`;
 }
 
@@ -324,6 +353,11 @@ sim.onPlatform = (event, arg, num) => {
       reduceMotion = num === 1;
       ($("motion") as HTMLInputElement).checked = reduceMotion;
       break;
+    case "rotation":
+      rotation = num & 3;
+      store(ROTATION_KEY, String(rotation));
+      showRotation();
+      break;
     case "layout":
       tiles = num === 1;
       saveLayout(tiles ? "tiles" : "list");
@@ -361,6 +395,13 @@ const motion = $("motion") as HTMLInputElement;
 motion.checked = reduceMotion;
 motion.addEventListener("change", () => {
   reduceMotion = motion.checked;
+  pushDevice();
+});
+
+// The board's BOOT button: a quick press turns the screen a quarter turn (same as firmware).
+$("boot").addEventListener("click", () => {
+  rotation = (rotation + 1) & 3;
+  store(ROTATION_KEY, String(rotation));
   pushDevice();
 });
 

@@ -75,6 +75,12 @@ void cb_set_layout(bool tiles, void *) {
     s_info_dirty = true;
 }
 
+void cb_set_rotation(uint8_t quarter_turns, void *) {
+    g_settings.rotation = quarter_turns & 3;
+    settings_save_display();
+    s_info_dirty = true;
+}
+
 void cb_select_host(uint8_t index, void *) { send_simple(NC_SELECT_HOST, index); }
 void cb_reconnect(void *) { send_simple(NC_RECONNECT); }
 void cb_forget_host(void *) { send_simple(NC_FORGET_HOST); }
@@ -84,7 +90,7 @@ void on_message_action(void *user) { send_simple(NC_ACTION, (uint8_t)(uintptr_t)
 
 const cl_platform_t kPlatform = {
     cb_toggle_pin,  cb_set_brightness, cb_set_reduce_motion, cb_select_host, cb_reconnect,
-    cb_forget_host, cb_factory_reset,  cb_set_layout,        nullptr,
+    cb_forget_host, cb_factory_reset,  cb_set_layout,        cb_set_rotation, nullptr,
 };
 
 /* ------------------------------------------------------- net -> UI */
@@ -172,6 +178,7 @@ void update_device_info(void) {
     info.reduce_motion = g_settings.reduce_motion;
     info.is_simulator = false;
     info.tiles = g_settings.tiles;
+    info.rotation = g_settings.rotation;
     cl_ui_set_device_info(&info);
 }
 
@@ -205,6 +212,13 @@ void service_boot_button(void) {
         if (!fired && held >= 3000) {
             LOGI("btn", "opening setup portal");
             send_simple(NC_OPEN_PORTAL);
+        } else if (held < 1000) {
+            /* Quick press: turn the screen a quarter turn (there's no tilt sensor to do it for you). */
+            g_settings.rotation = (uint8_t)((g_settings.rotation + 1) & 3);
+            settings_save_display();
+            s_info_dirty = true;
+            LOGI("btn", "BOOT pressed: rotate to %u", g_settings.rotation);
+            cl_ui_set_rotation(g_settings.rotation);
         }
         down_since = 0;
         hinted = false;
@@ -294,6 +308,7 @@ void setup() {
     s_ui_snap = (cl_snapshot_t *)heap_caps_calloc(1, sizeof(cl_snapshot_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!s_ui_snap) s_ui_snap = (cl_snapshot_t *)calloc(1, sizeof(cl_snapshot_t));
 
+    cl_ui_set_rotation(g_settings.rotation); /* start in the saved orientation, no portrait flash */
     cl_ui_init(&kPlatform);
     update_device_info();
     cl_ui_show_progress("Hello!", "Waking up\xE2\x80\xA6");

@@ -136,16 +136,20 @@ function SessionRow(props: {
             ? html`<span class="muted">helpers: —</span>`
             : html`🐾 ${helpers} helper${helpers === 1 ? "" : "s"}${s.subagents.types.length ? html` <span class="muted">(${s.subagents.types.join(", ")})</span>` : null}`}
         </span>
-        <span title="Session tokens: input + output + cache writes. Cache reads are counted separately.">
-          Tokens ${tokens(s.tokens.sessionTotal)}
+        <span title="Context: how much the session is holding in memory right now (from its latest response).">
+          ${s.context.usedPercent !== null
+            ? html`<span class="ctx">
+                Context <span class="bar"><span style=${`width:${Math.round(s.context.usedPercent)}%`}></span></span>
+                ${s.context.tokens != null ? `${tokens(s.context.tokens)} · ` : ""}${Math.round(s.context.usedPercent)}%
+              </span>`
+            : s.context.tokens != null
+              ? html`Context ${tokens(s.context.tokens)}`
+              : html`<span class="muted">context: —</span>`}
+        </span>
+        <span title="Total: all the work in the session so far (input + output + cache writes, including subagents). Cache reads are counted separately.">
+          Total ${tokens(s.tokens.sessionTotal)}
           ${s.tokens.cacheRead !== null ? html`<span class="muted"> · ${tokens(s.tokens.cacheRead)} cache reads</span>` : null}
         </span>
-        ${s.context.usedPercent !== null
-          ? html`<span class="ctx" title="Context window in use right now (not lifetime tokens)">
-              Context <span class="bar"><span style=${`width:${Math.round(s.context.usedPercent)}%`}></span></span>
-              ${Math.round(s.context.usedPercent)}%
-            </span>`
-          : null}
         <span class="muted">active ${ago(s.lastActivityAt, now)}</span>
       </div>
     </div>

@@ -27,6 +27,7 @@ struct Settings {
     uint8_t brightness;  /* 5..100 */
     bool reduce_motion;
     bool tiles; /* home layout: tile grid */
+    uint8_t rotation; /* quarter turns, 0..3 */
 };
 
 extern Settings g_settings;

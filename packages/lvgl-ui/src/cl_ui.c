@@ -11,13 +11,34 @@
 #include "cl_sprites.h"
 #include "cl_theme.h"
 
-#define HEADER_H 52
-#define NAV_H 52
-#define PAGE_H (CL_SCREEN_H - HEADER_H - NAV_H)
 #define PAGE_PAD 8
-#define CARD_W (CL_SCREEN_W - 2 * PAGE_PAD)
+#define STRIP_H 28
 #define MAX_FEATURED 6
 #define MAX_TOP_TOKENS 5
+
+/* ------------------------------------------------------------------ geometry
+ * Portrait (320x480): header, pages, usage strip, bottom nav bar.
+ * Landscape (480x320): header, left nav rail, pages, usage strip. Recomputed on rotation. */
+
+static int32_t SW = CL_SCREEN_W, SH = CL_SCREEN_H;
+static bool LAND;
+static int32_t HEADER_H, NAV_H, RAIL_W, PAGE_W, PAGE_H, CARD_W, TILE_W;
+
+static void compute_geometry(void)
+{
+    lv_display_t *disp = lv_display_get_default();
+    SW = lv_display_get_horizontal_resolution(disp);
+    SH = lv_display_get_vertical_resolution(disp);
+    LAND = SW > SH;
+    HEADER_H = LAND ? 44 : 52;
+    NAV_H = LAND ? 0 : 52;
+    RAIL_W = LAND ? 72 : 0;
+    PAGE_W = SW - RAIL_W;
+    PAGE_H = SH - HEADER_H - NAV_H - STRIP_H;
+    CARD_W = PAGE_W - 2 * PAGE_PAD;
+    int32_t cols = CARD_W >= 380 ? 3 : 2;
+    TILE_W = (CARD_W - (cols - 1) * 8) / cols;
+}
 
 /* ------------------------------------------------------------------ state */
 
@@ -34,6 +55,17 @@ static struct {
     uint8_t brightness;
     bool reduce_motion, simulator, tiles;
 } dev = {"0.0.0", "", "", "", 0, 80, false, false, false};
+
+/* What the onboarding screen last showed, so it can be redrawn after a rotation. */
+typedef enum { ONB_NONE = 0, ONB_WIFI, ONB_PROGRESS, ONB_HOSTS, ONB_PAIRING, ONB_MESSAGE } onb_kind_t;
+static struct {
+    onb_kind_t kind;
+    char a[96], b[192], c[96];
+    char hosts[6][48];
+    uint8_t host_count;
+    void (*action)(void *);
+    void *user;
+} onb_last;
 
 /* ------------------------------------------------------------------ widgets */
 
@@ -69,7 +101,8 @@ static struct {
     uint8_t page;
 
     /* home */
-    lv_obj_t *featured, *rows, *tiles_box, *hint, *empty, *strip_lbl, *layout_icon;
+    lv_obj_t *featured, *rows, *tiles_box, *hint, *empty, *layout_icon, *nav;
+    lv_obj_t *strip_today, *strip_5h_bar, *strip_5h_lbl, *strip_wk_bar, *strip_wk_lbl;
     bool tiles_mode;
     tile_t tiles[CL_MAX_SESSIONS];
     uint8_t tile_count;
@@ -99,9 +132,12 @@ static struct {
 } det;
 
 static struct {
-    lv_obj_t *scr, *slider, *motion, *wifi, *ip, *host, *fw, *reset_lbl;
+    lv_obj_t *scr, *slider, *motion, *rot_lbl, *wifi, *ip, *host, *fw, *reset_lbl;
     bool reset_armed;
 } set;
+
+static uint8_t rotation_q; /* quarter turns currently applied */
+static void apply_rotation(uint8_t q, bool notify);
 
 static struct {
     lv_obj_t *scr, *body;
@@ -272,7 +308,7 @@ static void pager_scrolled(lv_event_t *e)
 {
     (void)e;
     int32_t x = lv_obj_get_scroll_x(d.pager);
-    uint8_t idx = (uint8_t)((x + CL_SCREEN_W / 2) / CL_SCREEN_W);
+    uint8_t idx = (uint8_t)((x + PAGE_W / 2) / PAGE_W);
     if (idx > 2) idx = 2;
     if (idx != d.page) set_page(idx, false);
 }
@@ -348,7 +384,7 @@ static void build_card(card_t *c, lv_obj_t *parent, const cl_session_t *s)
     lv_obj_set_flex_align(ctx, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(ctx, 6, 0);
     cl_label(ctx, &cl_font_12, CL_C_MUTED, "Context");
-    c->ctx_bar = cl_bar(ctx, 56, CL_C_TERRACOTTA);
+    c->ctx_bar = cl_bar(ctx, 50, CL_C_TERRACOTTA);
     c->ctx_lbl = cl_label(ctx, &cl_font_12, CL_C_CREAM_DIM, "");
     c->tok_lbl = cl_label(ctx, &cl_font_12, CL_C_CREAM_DIM, "");
     lv_obj_set_flex_grow(c->tok_lbl, 1);
@@ -373,6 +409,7 @@ static void update_card(card_t *c, const cl_session_t *s)
     lv_label_set_text(c->helpers_lbl, buf);
     lv_obj_set_style_text_color(c->helpers_lbl, CL_HEX(s->agents_active > 0 ? CL_C_CREAM_DIM : CL_C_MUTED), 0);
 
+    char num[16];
     if (s->context_pct >= 0) {
         lv_obj_remove_flag(c->ctx_bar, LV_OBJ_FLAG_HIDDEN);
         lv_bar_set_value(c->ctx_bar, s->context_pct, LV_ANIM_OFF);
@@ -380,12 +417,13 @@ static void update_card(card_t *c, const cl_session_t *s)
                                   LV_PART_INDICATOR);
         lv_label_set_text_fmt(c->ctx_lbl, "%d%%", s->context_pct);
     } else {
+        /* Without the status line we still know how much is in context, just not the window size. */
         lv_obj_add_flag(c->ctx_bar, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text(c->ctx_lbl, "\xE2\x80\x94");
+        cl_fmt_tokens(num, sizeof(num), s->context_tokens);
+        lv_label_set_text(c->ctx_lbl, num);
     }
-    char tok[16];
-    cl_fmt_tokens(tok, sizeof(tok), s->tokens);
-    lv_label_set_text_fmt(c->tok_lbl, "%s tok", tok);
+    cl_fmt_tokens(num, sizeof(num), s->tokens);
+    lv_label_set_text_fmt(c->tok_lbl, "%s total", num);
 
     bool needs = s->state == CL_STATE_NEEDS_ATTENTION;
     lv_obj_set_style_border_color(c->root, CL_HEX(needs ? CL_C_AMBER : CL_C_LINE), 0);
@@ -417,11 +455,11 @@ static void build_row(row_t *r, lv_obj_t *parent, const cl_session_t *s)
     lv_obj_set_flex_align(top, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(top, 4, 0);
     r->name = cl_label(top, &cl_font_14, CL_C_CREAM, "");
-    lv_obj_set_width(r->name, 160);
+    lv_obj_set_width(r->name, CARD_W - 20 - 44 - 8 - 60);
     cl_label_oneline(r->name);
     r->heart = heart(top);
     r->state = cl_label(col, &cl_font_12, CL_C_SAGE, "");
-    lv_obj_set_width(r->state, 180);
+    lv_obj_set_width(r->state, CARD_W - 20 - 44 - 8 - 40);
     cl_label_oneline(r->state);
 
     r->right = cl_label(r->root, &cl_font_12, CL_C_MUTED, "");
@@ -446,7 +484,6 @@ static void update_row(row_t *r, const cl_session_t *s)
     set_attention(r->root, s->state == CL_STATE_NEEDS_ATTENTION);
 }
 
-#define TILE_W ((CARD_W - 8) / 2)
 
 static void build_tile(tile_t *t, lv_obj_t *parent, const cl_session_t *s)
 {
@@ -496,7 +533,7 @@ static void update_tile(tile_t *t, const cl_session_t *s)
     lv_obj_set_style_text_color(t->state, CL_HEX(cl_state_color(s->state)), 0);
     cl_helpers_set(t->helpers, s->agents_active);
     cl_fmt_tokens(tok, sizeof(tok), s->tokens);
-    lv_label_set_text_fmt(t->tok, "%s tok", tok);
+    lv_label_set_text_fmt(t->tok, "%s total", tok);
     bool needs = s->state == CL_STATE_NEEDS_ATTENTION;
     lv_obj_set_style_border_color(t->root, CL_HEX(needs ? CL_C_AMBER : CL_C_LINE), 0);
     lv_obj_set_style_border_width(t->root, needs ? 2 : 1, 0);
@@ -529,6 +566,61 @@ static void show(lv_obj_t *o, bool visible)
     else lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
 }
 
+/* ------------------------------------------------------------------ usage strip (bottom of the dashboard) */
+
+static void strip_limit(lv_obj_t *bar, lv_obj_t *lbl, const cl_rate_window_t *w)
+{
+    if (!w->present) {
+        lv_bar_set_value(bar, 0, LV_ANIM_OFF);
+        lv_label_set_text(lbl, "\xE2\x80\x94");
+        return;
+    }
+    lv_bar_set_value(bar, w->used_pct, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(bar, CL_HEX(w->used_pct >= 80 ? CL_C_AMBER : CL_C_TERRACOTTA), LV_PART_INDICATOR);
+    lv_label_set_text_fmt(lbl, "%d%%", w->used_pct);
+}
+
+static void update_strip(void)
+{
+    char today[16];
+    cl_fmt_tokens(today, sizeof(today), snap.daily_tokens);
+    lv_label_set_text_fmt(d.strip_today, "Today %s", today);
+    strip_limit(d.strip_5h_bar, d.strip_5h_lbl, &snap.five_hour);
+    strip_limit(d.strip_wk_bar, d.strip_wk_lbl, &snap.seven_day);
+}
+
+static void strip_group(lv_obj_t *parent, const char *name, int32_t bar_w, lv_obj_t **bar, lv_obj_t **lbl)
+{
+    lv_obj_t *g = cl_box(parent);
+    lv_obj_set_flex_flow(g, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(g, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(g, 5, 0);
+    cl_label(g, &cl_font_12, CL_C_MUTED, name);
+    *bar = cl_bar(g, bar_w, CL_C_TERRACOTTA);
+    lv_obj_set_height(*bar, 6);
+    *lbl = cl_label(g, &cl_font_12, CL_C_CREAM_DIM, "");
+    lv_obj_set_width(*lbl, 28);
+}
+
+static void build_strip(lv_obj_t *scr)
+{
+    lv_obj_t *s = cl_box(scr);
+    lv_obj_set_pos(s, RAIL_W, HEADER_H + PAGE_H);
+    lv_obj_set_size(s, PAGE_W, STRIP_H);
+    lv_obj_set_style_pad_hor(s, 10, 0);
+    lv_obj_set_style_bg_color(s, CL_HEX(CL_C_BG), 0);
+    lv_obj_set_style_bg_opa(s, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_side(s, LV_BORDER_SIDE_TOP, 0);
+    lv_obj_set_style_border_color(s, CL_HEX(CL_C_LINE), 0);
+    lv_obj_set_style_border_width(s, 1, 0);
+    lv_obj_set_flex_flow(s, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(s, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    d.strip_today = cl_label(s, &cl_font_12, CL_C_CREAM_DIM, "");
+    int32_t bar_w = LAND ? 90 : 40;
+    strip_group(s, "5h", bar_w, &d.strip_5h_bar, &d.strip_5h_lbl);
+    strip_group(s, "Week", bar_w, &d.strip_wk_bar, &d.strip_wk_lbl);
+}
+
 /* Tile mode: every session as an equal tile, in the service's order (pinned first). */
 static void update_home_tiles(void)
 {
@@ -558,12 +650,7 @@ static void update_home(void)
     show(d.empty, empty);
     show(d.hint, !empty && !any_pinned());
 
-    char today[16], strip[96];
-    cl_fmt_tokens(today, sizeof(today), snap.daily_tokens);
-    int len = snprintf(strip, sizeof(strip), "Today %s tokens", today);
-    if (snap.five_hour.present)
-        snprintf(strip + len, sizeof(strip) - (size_t)len, "  \xC2\xB7  5h limit %d%%", snap.five_hour.used_pct);
-    lv_label_set_text(d.strip_lbl, strip);
+    update_strip();
 
     if (d.tiles_mode) {
         update_home_tiles();
@@ -611,7 +698,7 @@ static lv_obj_t *make_page(lv_obj_t *pager)
 {
     lv_obj_t *p = lv_obj_create(pager);
     lv_obj_remove_style_all(p);
-    lv_obj_set_size(p, CL_SCREEN_W, PAGE_H);
+    lv_obj_set_size(p, PAGE_W, PAGE_H);
     lv_obj_set_style_pad_all(p, PAGE_PAD, 0);
     lv_obj_set_style_pad_row(p, 8, 0);
     lv_obj_set_flex_flow(p, LV_FLEX_FLOW_COLUMN);
@@ -664,12 +751,6 @@ static void build_home(lv_obj_t *p)
 
     d.hint = cl_label(p, &cl_font_12, CL_C_MUTED, "Long-press a session to pin it to the top");
     lv_obj_set_style_pad_left(d.hint, 4, 0);
-
-    lv_obj_t *strip = cl_box(p);
-    lv_obj_set_width(strip, CARD_W);
-    lv_obj_set_style_pad_ver(strip, 6, 0);
-    d.strip_lbl = cl_label(strip, &cl_font_12, CL_C_MUTED, "");
-    lv_obj_center(d.strip_lbl);
 }
 
 /* ------------------------------------------------------------------ agents */
@@ -809,7 +890,8 @@ static void build_usage(lv_obj_t *p)
     limit_row(limits, "5-hour limit", &d.five_bar, &d.five_lbl);
     limit_row(limits, "Weekly limit", &d.seven_bar, &d.seven_lbl);
     d.limits_hint = cl_label(limits, &cl_font_12, CL_C_MUTED,
-                             "Plan limits show up when the Claudette status line is on.");
+                             "No plan limits reported yet. Claude Code shares them through its status line, which only runs "
+                             "in the terminal (not the desktop app).");
     lv_obj_set_width(d.limits_hint, CARD_W - 20);
     lv_label_set_long_mode(d.limits_hint, LV_LABEL_LONG_MODE_WRAP);
 
@@ -820,8 +902,8 @@ static void build_usage(lv_obj_t *p)
     lv_obj_set_style_pad_row(d.top_list, 8, 0);
 
     lv_obj_t *note = cl_label(p, &cl_font_12, CL_C_MUTED,
-                              "Tokens = work done (input, output, cache writes). Context = how full a session's "
-                              "memory is right now. They're different things!");
+                              "Total = all the work a session has done (input, output, cache writes, its helpers too). "
+                              "Context = how much it's holding in memory right now. They're different things!");
     lv_obj_set_width(note, CARD_W - 8);
     lv_label_set_long_mode(note, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_style_pad_left(note, 4, 0);
@@ -890,7 +972,7 @@ static void update_usage(void)
             lv_obj_set_style_pad_row(r, 3, 0);
             make_session_target(r, u->id);
             u->name = cl_label(r, &cl_font_14, CL_C_CREAM, "");
-            lv_obj_set_width(u->name, 200);
+            lv_obj_set_width(u->name, CARD_W - 20 - 70);
             cl_label_oneline(u->name);
             u->value = cl_label(r, &cl_font_12, CL_C_CREAM_DIM, "");
             u->bar = cl_bar(r, CARD_W - 20, CL_C_SAGE);
@@ -1022,7 +1104,7 @@ static void build_dashboard(void)
     d.scr = cl_screen();
 
     lv_obj_t *hdr = cl_box(d.scr);
-    lv_obj_set_size(hdr, CL_SCREEN_W, HEADER_H);
+    lv_obj_set_size(hdr, SW, HEADER_H);
     lv_obj_set_style_pad_hor(hdr, 8, 0);
     lv_obj_set_flex_flow(hdr, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(hdr, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -1041,7 +1123,7 @@ static void build_dashboard(void)
     lv_obj_set_style_radius(d.hdr_dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(d.hdr_dot, LV_OPA_COVER, 0);
     d.hdr_sub = cl_label(subrow, &cl_font_12, CL_C_MUTED, "");
-    lv_obj_set_width(d.hdr_sub, 150);
+    lv_obj_set_width(d.hdr_sub, SW - 172);
     cl_label_oneline(d.hdr_sub);
 
     lv_obj_t *layout = lv_button_create(hdr);
@@ -1067,8 +1149,8 @@ static void build_dashboard(void)
 
     d.pager = lv_obj_create(d.scr);
     lv_obj_remove_style_all(d.pager);
-    lv_obj_set_pos(d.pager, 0, HEADER_H);
-    lv_obj_set_size(d.pager, CL_SCREEN_W, PAGE_H);
+    lv_obj_set_pos(d.pager, RAIL_W, HEADER_H);
+    lv_obj_set_size(d.pager, PAGE_W, PAGE_H);
     lv_obj_set_flex_flow(d.pager, LV_FLEX_FLOW_ROW);
     lv_obj_set_scroll_dir(d.pager, LV_DIR_HOR);
     lv_obj_set_scroll_snap_x(d.pager, LV_SCROLL_SNAP_START);
@@ -1082,46 +1164,63 @@ static void build_dashboard(void)
     build_usage(d.pages[2]);
     lv_image_set_src(d.layout_icon, &cl_spr_ico_grid_x2);
 
+    build_strip(d.scr);
+
     d.veil = cl_box(d.scr);
-    lv_obj_set_pos(d.veil, 0, HEADER_H);
-    lv_obj_set_size(d.veil, CL_SCREEN_W, PAGE_H);
+    lv_obj_set_pos(d.veil, RAIL_W, HEADER_H);
+    lv_obj_set_size(d.veil, PAGE_W, PAGE_H + STRIP_H);
     lv_obj_set_style_bg_color(d.veil, CL_HEX(CL_C_BG), 0);
     lv_obj_set_style_bg_opa(d.veil, LV_OPA_50, 0);
     lv_obj_remove_flag(d.veil, LV_OBJ_FLAG_CLICKABLE);
 
     d.banner = cl_box(d.scr);
-    lv_obj_set_size(d.banner, CL_SCREEN_W - 16, 30);
-    lv_obj_align(d.banner, LV_ALIGN_BOTTOM_MID, 0, -NAV_H - 8);
+    lv_obj_set_size(d.banner, PAGE_W - 16, 30);
+    lv_obj_align(d.banner, LV_ALIGN_BOTTOM_MID, RAIL_W / 2, -NAV_H - STRIP_H - 8);
     lv_obj_set_style_radius(d.banner, 15, 0);
     lv_obj_set_style_bg_opa(d.banner, LV_OPA_COVER, 0);
     lv_obj_remove_flag(d.banner, LV_OBJ_FLAG_CLICKABLE);
     d.banner_lbl = cl_label(d.banner, &cl_font_12, CL_C_BG, "");
     lv_obj_center(d.banner_lbl);
 
+    /* Navigation: a bar along the bottom in portrait, a rail down the left in landscape. */
     lv_obj_t *nav = cl_box(d.scr);
-    lv_obj_set_size(nav, CL_SCREEN_W, NAV_H);
-    lv_obj_align(nav, LV_ALIGN_BOTTOM_MID, 0, 0);
+    d.nav = nav;
     lv_obj_set_style_bg_color(nav, CL_HEX(CL_C_PANEL), 0);
     lv_obj_set_style_bg_opa(nav, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_side(nav, LV_BORDER_SIDE_TOP, 0);
     lv_obj_set_style_border_color(nav, CL_HEX(CL_C_LINE), 0);
     lv_obj_set_style_border_width(nav, 1, 0);
-    lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_ROW);
+    if (LAND) {
+        lv_obj_set_pos(nav, 0, HEADER_H);
+        lv_obj_set_size(nav, RAIL_W, SH - HEADER_H);
+        lv_obj_set_style_border_side(nav, LV_BORDER_SIDE_RIGHT, 0);
+        lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_COLUMN);
+    } else {
+        lv_obj_set_size(nav, SW, NAV_H);
+        lv_obj_align(nav, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_set_style_border_side(nav, LV_BORDER_SIDE_TOP, 0);
+        lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_ROW);
+    }
     static const char *names[3] = {"Home", "Agents", "Usage"};
     for (uintptr_t i = 0; i < 3; i++) {
         lv_obj_t *b = lv_button_create(nav);
         lv_obj_remove_style_all(b);
-        lv_obj_set_size(b, CL_SCREEN_W / 3, NAV_H);
+        if (LAND) lv_obj_set_size(b, RAIL_W, 60);
+        else lv_obj_set_size(b, SW / 3, NAV_H);
         lv_obj_set_style_bg_color(b, CL_HEX(CL_C_PANEL_HI), LV_STATE_PRESSED);
         lv_obj_set_style_bg_opa(b, LV_OPA_COVER, LV_STATE_PRESSED);
         lv_obj_t *l = cl_label(b, &cl_font_14, CL_C_MUTED, names[i]);
-        lv_obj_align(l, LV_ALIGN_CENTER, 0, 2);
+        lv_obj_align(l, LV_ALIGN_CENTER, LAND ? 2 : 0, LAND ? 0 : 2);
         lv_obj_t *dot = cl_box(b);
-        lv_obj_set_size(dot, 18, 4);
         lv_obj_set_style_radius(dot, 2, 0);
         lv_obj_set_style_bg_color(dot, CL_HEX(CL_C_TERRACOTTA), 0);
         lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
-        lv_obj_align(dot, LV_ALIGN_TOP_MID, 0, 6);
+        if (LAND) {
+            lv_obj_set_size(dot, 4, 18);
+            lv_obj_align(dot, LV_ALIGN_LEFT_MID, 4, 0);
+        } else {
+            lv_obj_set_size(dot, 18, 4);
+            lv_obj_align(dot, LV_ALIGN_TOP_MID, 0, 6);
+        }
         lv_obj_add_event_cb(b, nav_clicked, LV_EVENT_CLICKED, (void *)i);
         d.nav_btn[i] = b;
     }
@@ -1147,7 +1246,7 @@ static lv_obj_t *detail_row(lv_obj_t *parent, const char *title, lv_obj_t **valu
 static lv_obj_t *back_bar(lv_obj_t *scr, const char *title)
 {
     lv_obj_t *bar = cl_box(scr);
-    lv_obj_set_size(bar, CL_SCREEN_W, HEADER_H);
+    lv_obj_set_size(bar, SW, HEADER_H);
     lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_hor(bar, 4, 0);
@@ -1169,10 +1268,11 @@ static lv_obj_t *scroll_body(lv_obj_t *scr)
     lv_obj_t *body = lv_obj_create(scr);
     lv_obj_remove_style_all(body);
     lv_obj_set_pos(body, 0, HEADER_H);
-    lv_obj_set_size(body, CL_SCREEN_W, CL_SCREEN_H - HEADER_H);
+    lv_obj_set_size(body, SW, SH - HEADER_H);
     lv_obj_set_style_pad_all(body, PAGE_PAD, 0);
     lv_obj_set_style_pad_row(body, 8, 0);
     lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scroll_dir(body, LV_DIR_VER);
     lv_obj_set_style_bg_color(body, CL_HEX(CL_C_CREAM), LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(body, LV_OPA_40, LV_PART_SCROLLBAR);
@@ -1238,7 +1338,7 @@ static void build_detail(void)
     det.ctx_lbl = cl_label(ctop, &cl_font_14, CL_C_CREAM, "");
     det.ctx_bar = cl_bar(ctx, CARD_W - 20, CL_C_TERRACOTTA);
 
-    detail_row(info, "Session tokens", &det.tokens);
+    detail_row(info, "Total tokens", &det.tokens);
     detail_row(info, "Cache reads", &det.cache);
     detail_row(info, "Last activity", &det.activity);
     det.reason = cl_label(info, &cl_font_12, CL_C_MUTED, "");
@@ -1283,12 +1383,15 @@ static void refresh_detail(void)
         lv_label_set_text(det.types, s->agents_total > 0 ? "" : "");
     }
 
+    char ctx_tok[16];
+    cl_fmt_tokens(ctx_tok, sizeof(ctx_tok), s->context_tokens);
     if (s->context_pct >= 0) {
         lv_bar_set_value(det.ctx_bar, s->context_pct, LV_ANIM_OFF);
-        lv_label_set_text_fmt(det.ctx_lbl, "%d%% full", s->context_pct);
+        if (s->context_tokens >= 0) lv_label_set_text_fmt(det.ctx_lbl, "%s \xC2\xB7 %d%% full", ctx_tok, s->context_pct);
+        else lv_label_set_text_fmt(det.ctx_lbl, "%d%% full", s->context_pct);
         lv_obj_remove_flag(det.ctx_bar, LV_OBJ_FLAG_HIDDEN);
     } else {
-        lv_label_set_text(det.ctx_lbl, "Unavailable");
+        lv_label_set_text(det.ctx_lbl, s->context_tokens >= 0 ? ctx_tok : "Unavailable");
         lv_obj_add_flag(det.ctx_bar, LV_OBJ_FLAG_HIDDEN);
     }
     cl_fmt_tokens(buf, sizeof(buf), s->tokens);
@@ -1353,9 +1456,22 @@ static void reset_clicked(lv_event_t *e)
     if (plat.factory_reset) plat.factory_reset(plat.user);
 }
 
+static const char *rotation_name(uint8_t q)
+{
+    static const char *names[4] = {"Portrait", "Landscape", "Portrait, upside down", "Landscape, flipped"};
+    return names[q & 3];
+}
+
+static void rotate_clicked(lv_event_t *e)
+{
+    (void)e;
+    apply_rotation((uint8_t)((rotation_q + 1) & 3), true);
+}
+
 static void refresh_settings(void)
 {
     char buf[64];
+    if (set.rot_lbl) lv_label_set_text(set.rot_lbl, rotation_name(rotation_q));
     lv_slider_set_value(set.slider, dev.brightness, LV_ANIM_OFF);
     if (dev.reduce_motion) lv_obj_add_state(set.motion, LV_STATE_CHECKED);
     else lv_obj_remove_state(set.motion, LV_STATE_CHECKED);
@@ -1407,6 +1523,17 @@ static void build_settings(void)
     lv_obj_set_style_bg_color(set.motion, CL_HEX(CL_C_SAGE), LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_add_event_cb(set.motion, motion_changed, LV_EVENT_VALUE_CHANGED, NULL);
 
+    lv_obj_t *rrow = cl_box(disp);
+    lv_obj_set_width(rrow, LV_PCT(100));
+    lv_obj_set_flex_flow(rrow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(rrow, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *rcol = cl_box(rrow);
+    lv_obj_set_flex_flow(rcol, LV_FLEX_FLOW_COLUMN);
+    cl_label(rcol, &cl_font_14, CL_C_CREAM, "Screen");
+    set.rot_lbl = cl_label(rcol, &cl_font_12, CL_C_MUTED, "");
+    lv_obj_t *rbtn = cl_button(rrow, LV_SYMBOL_REFRESH "  Rotate", CL_C_TERRACOTTA, rotate_clicked, NULL);
+    lv_obj_set_height(rbtn, 40);
+
     lv_obj_t *info = cl_card(body);
     lv_obj_set_size(info, CARD_W, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(info, LV_FLEX_FLOW_COLUMN);
@@ -1438,7 +1565,7 @@ static lv_obj_t *onb_reset(cl_mood_t mood, const char *title, const char *body)
     if (!onb.scr) {
         onb.scr = cl_screen();
         onb.body = cl_box(onb.scr);
-        lv_obj_set_size(onb.body, CL_SCREEN_W, CL_SCREEN_H);
+        lv_obj_set_size(onb.body, SW, SH);
         lv_obj_set_style_pad_all(onb.body, 16, 0);
         lv_obj_set_style_pad_row(onb.body, 10, 0);
         lv_obj_set_flex_flow(onb.body, LV_FLEX_FLOW_COLUMN);
@@ -1450,12 +1577,12 @@ static lv_obj_t *onb_reset(cl_mood_t mood, const char *title, const char *body)
     lv_obj_t *m = cl_mascot_create(onb.body, 5);
     cl_mascot_set_mood(m, mood);
     lv_obj_t *t = cl_label(onb.body, &cl_font_28, CL_C_CREAM, title);
-    lv_obj_set_width(t, CL_SCREEN_W - 32);
+    lv_obj_set_width(t, SW - 32);
     lv_label_set_long_mode(t, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
     if (body && body[0]) {
         lv_obj_t *b = cl_label(onb.body, &cl_font_14, CL_C_CREAM_DIM, body);
-        lv_obj_set_width(b, CL_SCREEN_W - 40);
+        lv_obj_set_width(b, SW - 40);
         lv_label_set_long_mode(b, LV_LABEL_LONG_MODE_WRAP);
         lv_obj_set_style_text_align(b, LV_TEXT_ALIGN_CENTER, 0);
     }
@@ -1465,10 +1592,16 @@ static lv_obj_t *onb_reset(cl_mood_t mood, const char *title, const char *body)
 
 void cl_ui_show_wifi_setup(const char *ap_name, const char *ap_password, const char *portal_url)
 {
+    if (onb_last.a != ap_name) {
+        onb_last.kind = ONB_WIFI;
+        snprintf(onb_last.a, sizeof(onb_last.a), "%s", ap_name ? ap_name : "");
+        snprintf(onb_last.b, sizeof(onb_last.b), "%s", ap_password ? ap_password : "");
+        snprintf(onb_last.c, sizeof(onb_last.c), "%s", portal_url ? portal_url : "");
+    }
     lv_obj_t *b = onb_reset(CL_MOOD_HAPPY, "Hello! I'm Claudette",
                             "Let's get me on your Wi-Fi. Scan this with your phone, or join the network below.");
     lv_obj_t *card = cl_card(b);
-    lv_obj_set_size(card, CL_SCREEN_W - 32, LV_SIZE_CONTENT);
+    lv_obj_set_size(card, SW - 32, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(card, 12, 0);
@@ -1498,12 +1631,24 @@ void cl_ui_show_wifi_setup(const char *ap_name, const char *ap_password, const c
     char foot[96];
     snprintf(foot, sizeof(foot), "A setup page should pop up. If not, open %s", portal_url ? portal_url : "");
     lv_obj_t *f = cl_label(b, &cl_font_12, CL_C_MUTED, foot);
-    lv_obj_set_width(f, CL_SCREEN_W - 40);
+    lv_obj_set_width(f, SW - 40);
     lv_label_set_long_mode(f, LV_LABEL_LONG_MODE_WRAP);
     lv_obj_set_style_text_align(f, LV_TEXT_ALIGN_CENTER, 0);
 }
 
+static void show_progress(const char *title, const char *detail);
+
 void cl_ui_show_progress(const char *title, const char *detail)
+{
+    if (onb_last.a != title) {
+        onb_last.kind = ONB_PROGRESS;
+        snprintf(onb_last.a, sizeof(onb_last.a), "%s", title ? title : "");
+        snprintf(onb_last.b, sizeof(onb_last.b), "%s", detail ? detail : "");
+    }
+    show_progress(title, detail);
+}
+
+static void show_progress(const char *title, const char *detail)
 {
     lv_obj_t *b = onb_reset(CL_MOOD_WORKING, title, detail);
     lv_obj_t *sp = lv_spinner_create(b);
@@ -1522,8 +1667,15 @@ static void host_clicked(lv_event_t *e)
 
 void cl_ui_show_host_picker(const char *const *hosts, uint8_t count, const char *hint)
 {
+    if (onb_last.c != hint) {
+        onb_last.kind = ONB_HOSTS;
+        onb_last.host_count = count > 6 ? 6 : count;
+        for (uint8_t i = 0; i < onb_last.host_count; i++)
+            if (onb_last.hosts[i] != hosts[i]) snprintf(onb_last.hosts[i], sizeof(onb_last.hosts[i]), "%s", hosts[i]);
+        snprintf(onb_last.c, sizeof(onb_last.c), "%s", hint ? hint : "");
+    }
     if (count == 0) {
-        cl_ui_show_progress("Looking for your Mac\xE2\x80\xA6",
+        show_progress("Looking for your Mac\xE2\x80\xA6",
                             hint && hint[0] ? hint : "Make sure the Claudette service is running on your Mac.");
         return;
     }
@@ -1531,13 +1683,13 @@ void cl_ui_show_host_picker(const char *const *hosts, uint8_t count, const char 
                             count == 1 ? "Tap to start pairing." : "Tap the one you want me to keep an eye on.");
     for (uint8_t i = 0; i < count && i < 6; i++) {
         lv_obj_t *btn = cl_button(b, hosts[i], CL_C_TERRACOTTA, host_clicked, (void *)(uintptr_t)i);
-        lv_obj_set_width(btn, CL_SCREEN_W - 40);
+        lv_obj_set_width(btn, SW - 40);
         lv_obj_set_height(btn, 52);
         lv_obj_set_style_text_font(lv_obj_get_child(btn, 0), &cl_font_16, 0);
     }
     if (hint && hint[0]) {
         lv_obj_t *h = cl_label(b, &cl_font_12, CL_C_MUTED, hint);
-        lv_obj_set_width(h, CL_SCREEN_W - 40);
+        lv_obj_set_width(h, SW - 40);
         lv_label_set_long_mode(h, LV_LABEL_LONG_MODE_WRAP);
         lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
     }
@@ -1545,6 +1697,11 @@ void cl_ui_show_host_picker(const char *const *hosts, uint8_t count, const char 
 
 void cl_ui_show_pairing(const char *host_name, const char *code)
 {
+    if (onb_last.a != host_name) {
+        onb_last.kind = ONB_PAIRING;
+        snprintf(onb_last.a, sizeof(onb_last.a), "%s", host_name ? host_name : "");
+        snprintf(onb_last.b, sizeof(onb_last.b), "%s", code ? code : "");
+    }
     char body[128];
     snprintf(body, sizeof(body), "On %s, open localhost:3333 and type this code:", host_name ? host_name : "your Mac");
     lv_obj_t *b = onb_reset(CL_MOOD_NEEDS_YOU, "Let's pair up", body);
@@ -1567,13 +1724,110 @@ static void onb_action(lv_event_t *e)
 void cl_ui_show_message(const char *title, const char *body, const char *action_label,
                         void (*on_action)(void *user), void *user)
 {
+    if (onb_last.a != title) {
+        onb_last.kind = ONB_MESSAGE;
+        snprintf(onb_last.a, sizeof(onb_last.a), "%s", title ? title : "");
+        snprintf(onb_last.b, sizeof(onb_last.b), "%s", body ? body : "");
+        snprintf(onb_last.c, sizeof(onb_last.c), "%s", action_label ? action_label : "");
+        onb_last.action = on_action;
+        onb_last.user = user;
+    }
     lv_obj_t *b = onb_reset(CL_MOOD_IDLE, title, body);
     onb.action = on_action;
     onb.action_user = user;
     if (action_label && action_label[0]) {
         lv_obj_t *btn = cl_button(b, action_label, CL_C_TERRACOTTA, onb_action, NULL);
-        lv_obj_set_width(btn, CL_SCREEN_W - 80);
+        lv_obj_set_width(btn, SW - 80);
     }
+}
+
+/* ------------------------------------------------------------------ rotation */
+
+/* Redo the whole UI for the new screen shape, keeping what you were looking at. */
+static void rebuild_all(void)
+{
+    lv_obj_t *active = lv_screen_active();
+    bool on_detail = active == det.scr, on_settings = active == set.scr;
+    bool on_onb = onb.scr && active == onb.scr && onb_last.kind != ONB_NONE;
+    char detail_id[CL_MAX_ID];
+    snprintf(detail_id, sizeof(detail_id), "%s", det.id);
+    uint8_t page = d.page;
+    bool tiles = d.tiles_mode;
+    lv_obj_t *old[] = {d.scr, det.scr, set.scr, onb.scr};
+
+    compute_geometry();
+    memset(&d, 0, sizeof(d));
+    memset(&det, 0, sizeof(det));
+    memset(&set, 0, sizeof(set));
+    onb.scr = NULL;
+    onb.body = NULL;
+    build_dashboard();
+    build_detail();
+    build_settings();
+    d.tiles_mode = tiles;
+    lv_image_set_src(d.layout_icon, tiles ? &cl_spr_ico_list_x2 : &cl_spr_ico_grid_x2);
+    lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, RAIL_W / 2, -NAV_H - STRIP_H - 44);
+
+    lv_screen_load(on_settings ? set.scr : d.scr);
+    for (size_t i = 0; i < sizeof(old) / sizeof(old[0]); i++)
+        if (old[i]) lv_obj_delete(old[i]);
+
+    cl_ui_set_snapshot(&snap);
+    set_page(page, false);
+    lv_obj_scroll_to_x(d.pager, page * PAGE_W, LV_ANIM_OFF);
+    if (on_settings) refresh_settings();
+    if (on_detail && detail_id[0]) {
+        snprintf(det.id, sizeof(det.id), "%s", detail_id);
+        cl_mascot_set_look(det.mascot, det.id);
+        refresh_detail();
+        lv_screen_load(det.scr);
+    }
+    if (on_onb) {
+        /* Replay the setup screen from copies (the public calls record what they're given). */
+        char a[96], b[192], c[96], hs[6][48];
+        memcpy(a, onb_last.a, sizeof(a));
+        memcpy(b, onb_last.b, sizeof(b));
+        memcpy(c, onb_last.c, sizeof(c));
+        memcpy(hs, onb_last.hosts, sizeof(hs));
+        const char *hp[6];
+        for (int i = 0; i < 6; i++) hp[i] = hs[i];
+        switch (onb_last.kind) {
+        case ONB_WIFI: cl_ui_show_wifi_setup(a, b, c); break;
+        case ONB_PROGRESS: cl_ui_show_progress(a, b); break;
+        case ONB_HOSTS: cl_ui_show_host_picker(hp, onb_last.host_count, c); break;
+        case ONB_PAIRING: cl_ui_show_pairing(a, b); break;
+        case ONB_MESSAGE: cl_ui_show_message(a, b, c, onb_last.action, onb_last.user); break;
+        default: break;
+        }
+    }
+}
+
+static void apply_rotation(uint8_t q, bool notify)
+{
+    q &= 3;
+    if (q == rotation_q) return;
+    rotation_q = q;
+    lv_display_set_rotation(lv_display_get_default(), (lv_display_rotation_t)q);
+    if (d.scr) rebuild_all(); /* before cl_ui_init() there's nothing to rebuild */
+    if (notify && plat.set_rotation) plat.set_rotation(q, plat.user);
+}
+
+void cl_ui_set_rotation(uint8_t quarter_turns) { apply_rotation(quarter_turns, false); }
+
+uint8_t *cl_ui_rotate_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map, uint8_t *rot_buf,
+                            lv_area_t *out_area)
+{
+    *out_area = *area;
+    lv_display_rotation_t rot = lv_display_get_rotation(disp);
+    if (rot == LV_DISPLAY_ROTATION_0 || !rot_buf) return px_map;
+    const int32_t w = lv_area_get_width(area);
+    const int32_t h = lv_area_get_height(area);
+    lv_display_rotate_area(disp, out_area);
+    const uint32_t src_stride = lv_draw_buf_width_to_stride((uint32_t)w, LV_COLOR_FORMAT_RGB565);
+    const uint32_t dst_stride =
+        lv_draw_buf_width_to_stride((uint32_t)lv_area_get_width(out_area), LV_COLOR_FORMAT_RGB565);
+    lv_draw_rotate(px_map, rot_buf, w, h, (int32_t)src_stride, (int32_t)dst_stride, rot, LV_COLOR_FORMAT_RGB565);
+    return rot_buf;
 }
 
 /* ------------------------------------------------------------------ public */
@@ -1585,6 +1839,7 @@ void cl_ui_init(const cl_platform_t *platform)
     lv_theme_t *th = lv_theme_default_init(disp, CL_HEX(CL_C_TERRACOTTA), CL_HEX(CL_C_SAGE), true, &cl_font_14);
     lv_display_set_theme(disp, th);
 
+    compute_geometry();
     build_dashboard();
     build_detail();
     build_settings();
@@ -1596,7 +1851,7 @@ void cl_ui_init(const cl_platform_t *platform)
     lv_obj_set_style_pad_hor(toast, 14, 0);
     lv_obj_set_style_pad_ver(toast, 7, 0);
     cl_label(toast, &cl_font_14, CL_C_BG, "");
-    lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, 0, -NAV_H - 48);
+    lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, RAIL_W / 2, -NAV_H - STRIP_H - 44);
     lv_obj_add_flag(toast, LV_OBJ_FLAG_HIDDEN);
     toast_timer = lv_timer_create(toast_hide, 1600, NULL);
     lv_timer_pause(toast_timer);
@@ -1607,7 +1862,11 @@ void cl_ui_init(const cl_platform_t *platform)
     update_header();
 }
 
-void cl_ui_show_dashboard(void) { load(d.scr); }
+void cl_ui_show_dashboard(void)
+{
+    onb_last.kind = ONB_NONE;
+    load(d.scr);
+}
 
 void cl_ui_set_snapshot(const cl_snapshot_t *s)
 {
@@ -1640,6 +1899,7 @@ void cl_ui_set_device_info(const cl_device_info_t *info)
     dev.brightness = info->brightness;
     dev.simulator = info->is_simulator;
     if (d.tiles_mode != info->tiles) apply_layout(info->tiles);
+    if ((info->rotation & 3) != rotation_q) apply_rotation(info->rotation, false);
     if (dev.reduce_motion != info->reduce_motion) {
         dev.reduce_motion = info->reduce_motion;
         cl_mascot_set_reduce_motion(dev.reduce_motion);

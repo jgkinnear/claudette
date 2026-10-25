@@ -112,6 +112,17 @@ static void render_dashboard(void) {
 
 /* ------------------------------------------------------------------ cl_ui */
 
+/* The stub screens are portrait-only; rotation is accepted and ignored. */
+void cl_ui_set_rotation(uint8_t quarter_turns) { (void)quarter_turns; }
+
+uint8_t *cl_ui_rotate_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map, uint8_t *rot_buf,
+                            lv_area_t *out_area) {
+    (void)disp;
+    (void)rot_buf;
+    *out_area = *area;
+    return px_map;
+}
+
 void cl_ui_init(const cl_platform_t *platform) {
     s_pf = platform;
     new_screen("Claudette (stub UI)");

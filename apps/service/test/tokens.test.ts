@@ -28,6 +28,22 @@ describe("token ledger", () => {
     expect(s.cacheRead).toBe(expectedBusy.cacheRead);
   });
 
+  it("reports the current context size from the newest main-thread response", async () => {
+    const { home, ledger, now } = setup();
+    const t0 = now.getTime() + 60_000;
+    // A later main-thread reply (context grows), and a later subagent reply that must not count.
+    appendFileSync(
+      home.mainPath,
+      usageLine({ sessionId: ids.busy, messageId: "m-ctx", requestId: "r-ctx", timestamp: t0, usage: { input: 10, cacheCreation: 2_000, cacheRead: 900_000, output: 50 } }) + "\n",
+    );
+    appendFileSync(
+      home.subagentPath,
+      usageLine({ sessionId: ids.busy, messageId: "m-sub", requestId: "r-sub", timestamp: t0 + 1000, agentId: "a1", usage: { input: 5, cacheRead: 40_000 } }) + "\n",
+    );
+    await ledger.update([ids.busy]);
+    expect(ledger.session(ids.busy)!.contextTokens).toBe(902_010);
+  });
+
   it("counts only today's records in the daily total", async () => {
     const { ledger } = setup();
     await ledger.update([ids.busy]);
@@ -103,7 +119,10 @@ describe("token ledger", () => {
     const p = parseUsageLine(
       JSON.stringify({ type: "assistant", requestId: "r", timestamp: "2026-10-25T00:00:00Z", message: { id: "m", content: "secret", usage: { input_tokens: 1, output_tokens: 2, cache_creation_input_tokens: 3, cache_read_input_tokens: 4 } } }),
     )!;
-    expect(p).toEqual({ key: "m|r", rec: { work: 6, cacheRead: 4, ts: Date.parse("2026-10-25T00:00:00Z") } });
+    expect(p).toEqual({
+      key: "m|r",
+      rec: { work: 6, cacheRead: 4, context: 8, sidechain: false, ts: Date.parse("2026-10-25T00:00:00Z") },
+    });
     expect(JSON.stringify(p)).not.toContain("secret");
   });
 });

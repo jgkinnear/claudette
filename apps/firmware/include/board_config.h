@@ -153,8 +153,8 @@
 #endif
 
 /* ---- Buttons ------------------------------------------------------------ */
-/* BOOT button (GPIO0, active low). Hold 3 s: open the setup portal.
- * Hold 10 s: factory reset. Set to -1 to disable. */
+/* BOOT button (GPIO0, active low). Quick press: rotate the screen a quarter turn.
+ * Hold 3 s: open the setup portal. Hold 10 s: factory reset. Set to -1 to disable. */
 #ifndef BOOT_BUTTON_PIN
 #define BOOT_BUTTON_PIN 0
 #endif

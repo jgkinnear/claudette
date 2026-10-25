@@ -13,7 +13,7 @@ type Debug = {
 };
 
 async function open(page: Page, query: string) {
-  await page.goto(`/?motion=reduce&layout=list&${query}`);
+  await page.goto(`/?motion=reduce&layout=list&rotation=0&${query}`);
   await page.waitForFunction(() => "claudette" in window);
   // Capture at the panel's native 320×480.
   await page.evaluate(() => document.getElementById("device")!.style.setProperty("--zoom", "1"));
@@ -92,4 +92,29 @@ test("layout toggle switches between list and tiles", async ({ page }) => {
   await tap(page, 246, 26);
   await pump(page, 2000);
   await expect(page.locator("#screen")).toHaveScreenshot("many.png");
+});
+
+test("landscape: rail navigation, list and tiles", async ({ page }) => {
+  await open(page, "scenario=tour&rotation=1");
+  await expect(page.locator("#screen-wrap")).toHaveScreenshot("landscape-tour.png");
+  await open(page, "scenario=many&rotation=1&layout=tiles");
+  await expect(page.locator("#screen-wrap")).toHaveScreenshot("landscape-tiles.png");
+});
+
+test("rotate from settings re-lays out the UI and remembers it", async ({ page }) => {
+  await open(page, "scenario=tour");
+  await tap(page, 296, 26); // gear
+  await pump(page, 400);
+  await tap(page, 251, 187); // Screen → Rotate
+  await pump(page, 600);
+  expect(await page.evaluate(() => localStorage.getItem("claudette.rotation"))).toBe("1");
+  await expect(page.locator("#screen-wrap")).toHaveScreenshot("landscape-settings.png");
+});
+
+test("BOOT button rotates a quarter turn per press", async ({ page }) => {
+  await open(page, "scenario=tour");
+  await page.click("#boot");
+  await pump(page, 600);
+  expect(await page.evaluate(() => localStorage.getItem("claudette.rotation"))).toBe("1");
+  await expect(page.locator("#screen-wrap")).toHaveScreenshot("boot-rotated.png");
 });

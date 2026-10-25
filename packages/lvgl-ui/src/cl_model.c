@@ -327,6 +327,7 @@ static void parse_session(const parser_t *p, int o, int64_t now, cl_session_t *s
 
     double pct;
     int ctx = get(p, o, "context");
+    s->context_tokens = get_i64(p, ctx, "tokens");
     s->context_pct = (int8_t)(get_number(p, ctx, "usedPercent", &pct) ? (pct < 0 ? 0 : pct > 100 ? 100 : (int)(pct + 0.5))
                                                                         : CL_UNKNOWN);
 }

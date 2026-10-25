@@ -58,8 +58,13 @@ export const Tokens = z.object({
 export type Tokens = z.infer<typeof Tokens>;
 
 export const Context = z.object({
-  /** Current context window occupancy, 0-100. Not lifetime tokens. */
+  /** Current context window occupancy, 0-100 (needs the Claudette status line). Not lifetime tokens. */
   usedPercent: z.number().min(0).max(100).nullable(),
+  /**
+   * Tokens in the context window right now (from the latest response in the transcript),
+   * available without the status line. Optional so older services stay valid.
+   */
+  tokens: z.number().int().nonnegative().nullable().optional(),
   quality: Quality,
 });
 export type Context = z.infer<typeof Context>;

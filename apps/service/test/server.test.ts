@@ -292,7 +292,7 @@ describe("hook intake", () => {
     expect((await http(t.port, "POST", "/hooks/statusline", { headers: json, body: statusLinePayload(ids.busy) })).status).toBe(403);
     expect((await http(t.port, "POST", "/hooks/statusline", { headers: h, body: statusLinePayload(ids.busy, { contextPercent: 42 }) })).status).toBe(204);
     const snap = (await http(t.port, "GET", "/admin/api/status")).body as Snapshot;
-    expect(snap.sessions.find((s) => s.displayName === "teapot api")!.context).toEqual({ usedPercent: 42, quality: "observed" });
+    expect(snap.sessions.find((s) => s.displayName === "teapot api")!.context).toMatchObject({ usedPercent: 42, quality: "observed" });
     expect(snap.rateLimits?.fiveHour?.usedPercent).toBe(23.5);
     expect(Snapshot.safeParse(snap).success).toBe(true);
   });

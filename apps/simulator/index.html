@@ -23,12 +23,15 @@
     <main class="stage">
       <section class="device-wrap" aria-label="Simulated Claudette display">
         <div class="device" id="device">
-          <canvas id="screen" width="320" height="480" tabindex="0" aria-label="Claudette screen. Tap sessions for details, long-press to pin."></canvas>
+          <div class="screen-wrap" id="screen-wrap">
+            <canvas id="screen" width="320" height="480" tabindex="0" aria-label="Claudette screen. Tap sessions for details, long-press to pin."></canvas>
+          </div>
         </div>
         <div class="device-foot">
           <span class="led" id="led"></span>
           <span id="status">Waking up…</span>
         </div>
+        <button class="boot" id="boot" title="Like the board's BOOT button: a quick press rotates the screen">BOOT · rotate</button>
         <div class="zoom" role="group" aria-label="Zoom">
           <button data-zoom="1">1×</button>
           <button data-zoom="1.5" class="on">1.5×</button>

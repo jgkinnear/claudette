@@ -6,6 +6,10 @@ interface UsageRec {
   /** input + output + cache creation */
   work: number;
   cacheRead: number;
+  /** Prompt size of this request (input + cache creation + cache read): the context in use. */
+  context: number;
+  /** Written by a subagent inside the main transcript (older Claude Code versions). */
+  sidechain: boolean;
   ts: number;
 }
 
@@ -16,11 +20,15 @@ interface Tracked {
   records: Map<string, UsageRec>;
   lastTs: number;
   mtimeMs: number;
+  /** Context size of the newest main-thread response in this file. */
+  latestContext: { ts: number; tokens: number } | null;
 }
 
 export interface SessionTokens {
   sessionTotal: number;
   cacheRead: number;
+  /** Tokens in the session's context window as of its latest response (main thread only). */
+  contextTokens: number | null;
   lastActivityMs: number | null;
 }
 
@@ -58,6 +66,7 @@ export function parseUsageLine(line: string): { key: string; rec: UsageRec } | n
   let o: {
     type?: unknown;
     uuid?: unknown;
+    isSidechain?: unknown;
     requestId?: unknown;
     timestamp?: unknown;
     message?: { id?: unknown; usage?: Record<string, unknown> };
@@ -78,6 +87,8 @@ export function parseUsageLine(line: string): { key: string; rec: UsageRec } | n
     rec: {
       work: n(u.input_tokens) + n(u.output_tokens) + n(u.cache_creation_input_tokens),
       cacheRead: n(u.cache_read_input_tokens),
+      context: n(u.input_tokens) + n(u.cache_creation_input_tokens) + n(u.cache_read_input_tokens),
+      sidechain: o.isSidechain === true,
       ts: Number.isFinite(ts) ? ts : 0,
     },
   };
@@ -226,7 +237,7 @@ export class TokenLedger {
     if (!t || t.ino !== st.ino || st.size < t.offset) {
       // new, replaced or truncated: start over
       changed = Boolean(t && t.records.size > 0);
-      t = { path, ino: st.ino, offset: 0, records: new Map(), lastTs: 0, mtimeMs: st.mtimeMs };
+      t = { path, ino: st.ino, offset: 0, records: new Map(), lastTs: 0, mtimeMs: st.mtimeMs, latestContext: null };
       this.files.set(path, t);
     }
     t.mtimeMs = st.mtimeMs;
@@ -255,6 +266,10 @@ export class TokenLedger {
               // keep the first timestamp, the latest numbers
               t.records.set(parsed.key, { ...parsed.rec, ts: prev?.ts || parsed.rec.ts });
               if (parsed.rec.ts > t.lastTs) t.lastTs = parsed.rec.ts;
+              if (!parsed.rec.sidechain && parsed.rec.context > 0 && parsed.rec.ts >= (t.latestContext?.ts ?? 0)) {
+                if (t.latestContext?.tokens !== parsed.rec.context) changed = true;
+                t.latestContext = { ts: parsed.rec.ts, tokens: parsed.rec.context };
+              }
             }
           }
           start = nl + 1;
@@ -291,7 +306,13 @@ export class TokenLedger {
     }
     const mtime = this.files.get(main)?.mtimeMs ?? 0;
     const lastActivity = Math.max(last, mtime);
-    return { sessionTotal: work, cacheRead, lastActivityMs: lastActivity > 0 ? lastActivity : null };
+    const ctx = this.files.get(main)?.latestContext ?? null;
+    return {
+      sessionTotal: work,
+      cacheRead,
+      contextTokens: ctx ? ctx.tokens : null,
+      lastActivityMs: lastActivity > 0 ? lastActivity : null,
+    };
   }
 
   /** Today's total across all transcripts (host-local calendar day). */

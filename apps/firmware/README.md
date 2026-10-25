@@ -44,6 +44,7 @@ If upload can't find the port, hold **BOOT**, tap **RST**, release BOOT, and run
 
 | What | How |
 |---|---|
+| Rotate the screen (portrait ↔ landscape) | Quick press of **BOOT**, or Settings → Screen → Rotate |
 | Re-run Wi-Fi / address setup (keeps pairing) | Hold **BOOT** for 3 s and let go, or send `setup` over serial |
 | Forget the Mac and pair again | Settings → "Pair with another Mac", or send `forget` over serial |
 | Factory reset (wipes Wi-Fi, pairing, preferences) | Settings → Factory reset, hold **BOOT** for 10 s, or send `factory-reset` over serial |

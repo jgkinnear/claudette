@@ -59,7 +59,8 @@ function session(now: Date, partial: Partial<Session> & { displayName: string })
       quality: "observed",
     },
     tokens: { sessionTotal: 42_000, cacheRead: 610_000, quality: "observed", source: "transcript-usage" },
-    context: { usedPercent: null, quality: "unavailable" },
+    // Context size is known from the transcript; the % needs the optional status line.
+    context: { usedPercent: null, tokens: 48_600, quality: "observed" },
     lastActivityAt: ago(now, 30),
     ...partial,
   };
@@ -117,7 +118,7 @@ export const scenarios: Scenario[] = [
             stateSince: ago(now, 312),
             subagents: helpers(now, 2, ["Explore", "general-purpose"]),
             tokens: { sessionTotal: 84_200, cacheRead: 1_920_000, quality: "observed", source: "transcript-usage" },
-            context: { usedPercent: 38, quality: "observed" },
+            context: { usedPercent: 38, tokens: 76_000, quality: "observed" },
           }),
           session(now, {
             id: "tour-api",
@@ -127,7 +128,7 @@ export const scenarios: Scenario[] = [
             state: "ready",
             stateSince: ago(now, 64),
             tokens: { sessionTotal: 212_900, cacheRead: 4_100_000, quality: "observed", source: "transcript-usage" },
-            context: { usedPercent: 71, quality: "observed" },
+            context: { usedPercent: 71, tokens: 142_000, quality: "observed" },
           }),
           session(now, { id: "tour-docs", displayName: "Docs tidy-up", state: "ready", lastActivityAt: ago(now, 1800) }),
           session(now, {
@@ -166,6 +167,7 @@ export const scenarios: Scenario[] = [
       maps.subagents = { ...maps.subagents, active: t.length, types: t };
       maps.state = t.length > 0 ? "working" : phase >= 10 ? "ready" : "working";
       maps.context.usedPercent = Math.min(95, 38 + phase * 3);
+      maps.context.tokens = maps.context.usedPercent * 2000;
       if (phase === 4) {
         api.state = "needs_attention";
         api.needsAttentionReason = "permission prompt";
@@ -202,7 +204,7 @@ export const scenarios: Scenario[] = [
           state: "working",
           stateSince: ago(now, 75),
           subagents: helpers(now, 0, []),
-          context: { usedPercent: 12, quality: "observed" },
+          context: { usedPercent: 12, tokens: 24_000, quality: "observed" },
         }),
       ]),
   },
@@ -220,7 +222,7 @@ export const scenarios: Scenario[] = [
           state: "needs_attention",
           needsAttentionReason: "permission prompt",
           stateSince: ago(now, 48),
-          context: { usedPercent: 54, quality: "observed" },
+          context: { usedPercent: 54, tokens: 108_000, quality: "observed" },
         }),
         session(now, {
           displayName: "Landing page copy",
@@ -247,7 +249,7 @@ export const scenarios: Scenario[] = [
           stateSince: ago(now, 900),
           subagents: helpers(now, 5, ["Explore", "Plan", "general-purpose", "code-reviewer"], 610),
           tokens: { sessionTotal: 1_480_000, cacheRead: 22_000_000, quality: "observed", source: "transcript-usage" },
-          context: { usedPercent: 88, quality: "observed" },
+          context: { usedPercent: 88, tokens: 176_000, quality: "observed" },
         }),
         session(now, {
           displayName: "Test coverage",

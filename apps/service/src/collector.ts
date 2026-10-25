@@ -276,7 +276,11 @@ export class Collector implements DataSource {
       tokens: tok
         ? { sessionTotal: tok.sessionTotal, cacheRead: tok.cacheRead, quality: "observed", source: "transcript-usage" }
         : { sessionTotal: null, cacheRead: null, quality: "unavailable", source: "none" },
-      context: ctx === null ? { usedPercent: null, quality: "unavailable" } : { usedPercent: ctx, quality: "observed" },
+      context: {
+        usedPercent: ctx,
+        tokens: tok?.contextTokens ?? null,
+        quality: ctx === null && (tok?.contextTokens ?? null) === null ? "unavailable" : "observed",
+      },
       lastActivityAt: lastActivity ? new Date(lastActivity).toISOString() : null,
     };
   }

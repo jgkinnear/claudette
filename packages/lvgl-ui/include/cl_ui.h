@@ -41,6 +41,8 @@ typedef struct {
     void (*factory_reset)(void *user);
     /** Home layout changed: list (false) or tile grid (true). Persist it and pass it back in cl_device_info_t. */
     void (*set_layout)(bool tiles, void *user);
+    /** Screen rotated (quarter turns, 0..3). Persist it; the UI has already re-laid itself out. */
+    void (*set_rotation)(uint8_t quarter_turns, void *user);
     void *user;
 } cl_platform_t;
 
@@ -54,10 +56,25 @@ typedef struct {
     bool reduce_motion;
     bool is_simulator;
     bool tiles;              /* home layout: tile grid instead of list */
+    uint8_t rotation;        /* quarter turns: 0 portrait, 1 landscape, 2 portrait flipped, 3 landscape flipped */
 } cl_device_info_t;
 
 /** Build the UI on the default display. Call once after lv_init() and display setup. */
 void cl_ui_init(const cl_platform_t *platform);
+
+/**
+ * Rotate the screen (quarter turns, 0..3). Safe to call before cl_ui_init() to start rotated.
+ * The display's flush callback must then pass its pixels through cl_ui_rotate_flush().
+ */
+void cl_ui_set_rotation(uint8_t quarter_turns);
+
+/**
+ * For flush callbacks: when the display is rotated, rotate this partial render into `rot_buf`
+ * (at least as big as one draw buffer) and return it, with `out_area` in panel coordinates.
+ * Unrotated, returns `px_map` and copies `area`. RGB565 only.
+ */
+uint8_t *cl_ui_rotate_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map, uint8_t *rot_buf,
+                            lv_area_t *out_area);
 
 /** Show the dashboard (home / agents / usage) — the normal operating screen. */
 void cl_ui_show_dashboard(void);
