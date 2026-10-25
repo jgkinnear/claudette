@@ -9,8 +9,8 @@ used today. It runs on a small ESP32-S3 touchscreen that sits next to your keybo
 - **Local-first.** A small service on your Mac reads Claude Code's own status locally. No cloud, no API key.
 - **One UI, two runtimes.** The same LVGL C code runs on the device and in your browser.
 
-**▶ Try it in your browser: coming soon.** The real device UI, compiled to WebAssembly, with demo data. Until then,
-run it locally with `pnpm dev:sim` (see [Hacking on it](#hacking-on-it)).
+**[▶ Try it in your browser](https://jgkinnear.github.io/claudette/)**: the real device UI, compiled to WebAssembly,
+with demo data.
 
 > Claudette is an unofficial hobby project. It is not affiliated with or endorsed by Anthropic.
 

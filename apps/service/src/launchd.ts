@@ -68,6 +68,8 @@ function domain(): string {
   return `gui/${process.getuid?.() ?? 501}`;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function installLaunchAgent(
   paths: Paths,
   opts: { nodePath: string; cliPath: string; env: Record<string, string> },
@@ -77,9 +79,16 @@ export async function installLaunchAgent(
   mkdirSync(paths.logDir, { recursive: true, mode: 0o700 });
   atomicWrite(paths.launchAgentPlist, plistXml({ ...opts, logDir: paths.logDir }), 0o644);
   await exec("/bin/launchctl", ["bootout", `${domain()}/${LAUNCH_AGENT_LABEL}`]); // ignore "not loaded"
-  const r = await exec("/bin/launchctl", ["bootstrap", domain(), paths.launchAgentPlist]);
-  if (r.code !== 0) return { ok: false, detail: (r.stderr || r.stdout).trim() || `launchctl exited ${r.code}` };
-  return { ok: true, detail: "loaded" };
+  // bootout returns before the old job has fully gone; bootstrapping too soon fails with
+  // "Bootstrap failed: 5: Input/output error". Wait for it to disappear, then retry a few times.
+  for (let i = 0; i < 20 && (await launchAgentLoaded(exec)); i++) await sleep(150);
+  let r: ExecResult = { code: 1, stdout: "", stderr: "" };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    r = await exec("/bin/launchctl", ["bootstrap", domain(), paths.launchAgentPlist]);
+    if (r.code === 0) return { ok: true, detail: "loaded" };
+    await sleep(500);
+  }
+  return { ok: false, detail: (r.stderr || r.stdout).trim() || `launchctl exited ${r.code}` };
 }
 
 export async function uninstallLaunchAgent(paths: Paths, exec: Exec): Promise<boolean> {

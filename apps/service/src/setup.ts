@@ -111,9 +111,11 @@ export async function setup(opts: SetupOptions, io: SetupIO): Promise<SetupResul
   say("Here's what Claudette does on this Mac:");
   say("  • reads `claude agents --json --all` every 5 s (session names and states)");
   say("  • reads token counts from your Claude transcripts (numbers only, never message text)");
-  say(`  • adds 4 small HTTP hooks to ${paths.claudeSettings}`);
-  say(`    (SubagentStart, SubagentStop, Stop, SessionEnd → http://127.0.0.1:${port}/hooks/claude)`);
-  say("    so it can count helper agents. Your existing settings and hooks are kept, and a backup is made first.");
+  say(`  • adds small HTTP hooks to ${paths.claudeSettings} (→ http://127.0.0.1:${port}/hooks/claude):`);
+  say("    SubagentStart/Stop, Stop, SessionEnd to count helper agents, and PermissionRequest,");
+  say("    PreToolUse (AskUserQuestion only) and Notification to show what a waiting session is asking.");
+  say("    They always answer \"no decision\": Claude asks you exactly as before. Your existing settings");
+  say("    and hooks are kept, and a backup is made first.");
   if (platform === "darwin") say(`  • installs a LaunchAgent so it starts when you log in (no sudo)`);
   say(`  • listens on port ${port} on your local network so your paired Claudette display can read the dashboard`);
   say("Nothing is sent to the internet. `claudette uninstall` removes only Claudette's own changes.");

@@ -55,27 +55,43 @@ function permission(tool: string, input: Record<string, unknown>): Pick<Question
   }
 }
 
+/** Claude's multiple-choice question (the AskUserQuestion tool): the first question and its option labels. */
+function askUserQuestion(input: Record<string, unknown>, now: number): Question | null {
+  const questions = Array.isArray(input.questions) ? (input.questions as unknown[]) : [];
+  const q = obj(questions[0]);
+  const text = str(q.question, 240);
+  if (!text) return null;
+  const header = str(q.header, 40) ?? "Quick question";
+  const options = (Array.isArray(q.options) ? q.options : [])
+    .map((opt) => str(obj(opt).label, 40))
+    .filter((l): l is string => l !== null)
+    .slice(0, 4);
+  const more = questions.length > 1 ? ` (1 of ${questions.length})` : "";
+  return { kind: "question", title: clip(header + more, 60), detail: text, options, askedAt: now };
+}
+
+/** Plan approval (ExitPlanMode): the plan's first real line (skipping headings), else its title. */
+function planApproval(input: Record<string, unknown>, now: number): Question {
+  const lines = (typeof input.plan === "string" ? input.plan : "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const tidy = (l: string) => l.replace(/^[#>*\-\s\d.]+/, "").trim();
+  const first = tidy(lines.find((l) => !l.startsWith("#")) ?? "") || tidy(lines[0] ?? "");
+  return { kind: "question", title: "Here's my plan. Shall I go ahead?", detail: first ? clip(first, 240) : null, options: [], askedAt: now };
+}
+
 /** Turn one hook payload into a question, or null if it isn't one. Pure, no I/O. */
 export function questionFromHook(payload: unknown, now: number): Question | null {
   const o = obj(payload);
   const event = o.hook_event_name;
-  if (event === "PermissionRequest") {
-    const tool = str(o.tool_name, 80);
-    if (!tool) return null;
-    return { kind: "permission", ...permission(tool, obj(o.tool_input)), options: [], askedAt: now };
+  const tool = str(o.tool_name, 80);
+  const input = obj(o.tool_input);
+  // Claude's own questions arrive both as a permission request and as PreToolUse; read them the same way.
+  if ((event === "PermissionRequest" || event === "PreToolUse") && tool === "AskUserQuestion") {
+    return askUserQuestion(input, now);
   }
-  if (event === "PreToolUse" && o.tool_name === "AskUserQuestion") {
-    const questions = Array.isArray(obj(o.tool_input).questions) ? (obj(o.tool_input).questions as unknown[]) : [];
-    const q = obj(questions[0]);
-    const text = str(q.question, 240);
-    if (!text) return null;
-    const header = str(q.header, 40) ?? "Quick question";
-    const options = (Array.isArray(q.options) ? q.options : [])
-      .map((opt) => str(obj(opt).label, 40))
-      .filter((l): l is string => l !== null)
-      .slice(0, 4);
-    const more = questions.length > 1 ? ` (1 of ${questions.length})` : "";
-    return { kind: "question", title: clip(header + more, 60), detail: text, options, askedAt: now };
+  if (event === "PermissionRequest" && tool === "ExitPlanMode") return planApproval(input, now);
+  if (event === "PermissionRequest") {
+    if (!tool) return null;
+    return { kind: "permission", ...permission(tool, input), options: [], askedAt: now };
   }
   if (event === "Notification") {
     const type = o.notification_type;

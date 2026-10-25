@@ -40,6 +40,20 @@ describe("questions from hooks", () => {
     expect(q).toEqual({ kind: "question", title: "Database (1 of 2)", detail: "Which database for the cache?", options: ["Redis", "SQLite"], askedAt: now });
   });
 
+  it("reads Claude's question from the permission hook too (not 'Can I use AskUserQuestion?')", () => {
+    const q = perm("AskUserQuestion", {
+      questions: [{ header: "Layout", question: "Grid or list by default?", options: [{ label: "Grid" }, { label: "List" }] }],
+    });
+    expect(q).toMatchObject({ kind: "question", title: "Layout", detail: "Grid or list by default?", options: ["Grid", "List"] });
+  });
+
+  it("turns a plan approval into a friendly question", () => {
+    const q = perm("ExitPlanMode", { plan: "## Plan\n\n1. Add tile mode to the home screen\n2. Tests" });
+    expect(q).toMatchObject({ kind: "question", title: "Here's my plan. Shall I go ahead?", detail: "Add tile mode to the home screen" });
+    expect(perm("ExitPlanMode", { plan: "# Only a title" })?.detail).toBe("Only a title");
+    expect(perm("ExitPlanMode", { plan: "" })?.detail).toBeNull();
+  });
+
   it("ignores other events and strips control characters", () => {
     expect(questionFromHook({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls" } }, now)).toBeNull();
     expect(questionFromHook({ hook_event_name: "Notification", notification_type: "idle_prompt", message: "x" }, now)).toBeNull();
