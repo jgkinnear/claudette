@@ -19,10 +19,12 @@ describe("settings merge", () => {
     expect(merged.statusLine).toEqual(userSettings.statusLine);
     expect(merged.permissions).toEqual(userSettings.permissions);
     const hooks = merged.hooks as Record<string, Array<{ hooks: unknown[] }>>;
-    expect(hooks.PreToolUse).toEqual(userSettings.hooks.PreToolUse);
+    // The user's PreToolUse hooks stay first and untouched; ours only matches AskUserQuestion.
+    expect(hooks.PreToolUse!.slice(0, userSettings.hooks.PreToolUse!.length)).toEqual(userSettings.hooks.PreToolUse);
+    expect(hooks.PreToolUse!.at(-1)).toMatchObject({ matcher: "AskUserQuestion" });
     expect(hooks.SubagentStart!.length).toBe(2); // user's + ours
     expect(hooks.SubagentStart![0]).toEqual(userSettings.hooks.SubagentStart![0]);
-    expect(hooksState(merged, 3333)).toMatchObject({ installed: true });
+    expect(hooksState(merged, 3333)).toMatchObject({ installed: true, questions: true });
     expect(hooksState(merged, 4444).installed).toBe(false);
 
     // idempotent
@@ -90,7 +92,7 @@ describe("setup / uninstall (temp dirs only)", () => {
     const after = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(after.statusLine).toEqual(userSettings.statusLine); // never overwritten
     expect(r.statusLine).toBe("kept-yours");
-    expect(after.hooks.PreToolUse).toEqual(userSettings.hooks.PreToolUse);
+    expect(after.hooks.PreToolUse.slice(0, userSettings.hooks.PreToolUse!.length)).toEqual(userSettings.hooks.PreToolUse);
     expect(hooksState(after, 3333).installed).toBe(true);
     const plist = join(t.dir, "LaunchAgents", "dev.claudette.service.plist");
     expect(existsSync(plist)).toBe(true);

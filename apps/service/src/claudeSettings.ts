@@ -8,7 +8,21 @@ import { atomicWrite } from "./fsutil.js";
  *   - a statusLine whose command is the exact one we installed
  */
 
-export const HOOK_EVENTS = ["SubagentStart", "SubagentStop", "Stop", "SessionEnd"] as const;
+export const HOOK_EVENTS = [
+  "SubagentStart",
+  "SubagentStop",
+  "Stop",
+  "SessionEnd",
+  /* What a waiting session is asking (Claudette only reads these; it never answers). */
+  "PermissionRequest",
+  "PreToolUse",
+  "Notification",
+] as const;
+/** Narrow matchers so Claudette's hooks only run when they matter. */
+const HOOK_MATCHERS: Partial<Record<(typeof HOOK_EVENTS)[number], string>> = {
+  PreToolUse: "AskUserQuestion",
+  Notification: "permission_prompt|elicitation_dialog",
+};
 const OUR_URL = /^http:\/\/127\.0\.0\.1:\d{1,5}\/hooks\//;
 
 export type Settings = Record<string, unknown> & {
@@ -111,7 +125,7 @@ export function mergeHooks(settings: Settings, opts: { port: number; secret: str
   for (const event of HOOK_EVENTS) {
     const groups = groupsOf(hooks, event);
     groups.push({
-      matcher: "",
+      matcher: HOOK_MATCHERS[event] ?? "",
       hooks: [
         {
           type: "http",
@@ -128,8 +142,10 @@ export function mergeHooks(settings: Settings, opts: { port: number; secret: str
 }
 
 export interface HooksState {
-  /** All four events have a Claudette hook pointing at `port`. */
+  /** The subagent hooks point at `port`. */
   installed: boolean;
+  /** The question hooks (PermissionRequest etc.) are there too; older installs need `claudette setup` again. */
+  questions: boolean;
   events: string[];
   ports: number[];
 }
@@ -151,6 +167,7 @@ export function hooksState(settings: Settings, port: number): HooksState {
   }
   return {
     installed: events.includes("SubagentStart") && events.includes("SubagentStop"),
+    questions: events.includes("PermissionRequest") && events.includes("PreToolUse"),
     events,
     ports: [...ports],
   };

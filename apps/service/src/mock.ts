@@ -31,7 +31,7 @@ export class MockSource implements DataSource {
       .filter((s) => s.pinned)
       .sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0))
       .map((s) => s.id);
-    return { pinOrder: pinned, aliases: {}, remembered: {} };
+    return { pinOrder: pinned, aliases: {}, remembered: {}, questionText: true };
   }
 
   start(): void {
@@ -66,6 +66,10 @@ export class MockSource implements DataSource {
   }
 
   onHook(): void {
+    /* mock ignores hooks */
+  }
+
+  onQuestion(): void {
     /* mock ignores hooks */
   }
 

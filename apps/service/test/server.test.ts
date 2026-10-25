@@ -287,6 +287,21 @@ describe("hook intake", () => {
     expect(snap.sessions.find((s) => s.displayName === "teapot api")!.subagents.active).toBe(0);
   });
 
+  it("turns permission hooks into a question, with details only when allowed", async () => {
+    const h = { ...json, "X-Claudette-Hook": secret() };
+    const body = { hook_event_name: "PermissionRequest", session_id: ids.busy, tool_name: "Bash", tool_input: { command: "pnpm test --watch" } };
+    expect((await http(t.port, "POST", "/hooks/claude", { headers: h, body })).status).toBe(204); // no decision: Claude asks as usual
+    let snap = (await http(t.port, "GET", "/admin/api/status")).body as Snapshot;
+    let s = snap.sessions.find((x) => x.displayName === "teapot api")!;
+    expect(s.question).toMatchObject({ kind: "permission", title: "Can I run this command?", detail: null, options: [] });
+    expect(Snapshot.safeParse(snap).success).toBe(true);
+    const r = await http(t.port, "PATCH", "/admin/api/preferences", { headers: admin, body: { questionText: true } });
+    expect(r.body.questionText).toBe(true);
+    snap = (await http(t.port, "GET", "/admin/api/status")).body as Snapshot;
+    s = snap.sessions.find((x) => x.displayName === "teapot api")!;
+    expect(s.question?.detail).toBe("pnpm test --watch");
+  });
+
   it("accepts status-line posts for context % and rate limits", async () => {
     const h = { ...json, "X-Claudette-Hook": secret() };
     expect((await http(t.port, "POST", "/hooks/statusline", { headers: json, body: statusLinePayload(ids.busy) })).status).toBe(403);

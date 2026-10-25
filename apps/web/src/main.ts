@@ -130,6 +130,13 @@ function SessionRow(props: {
           ? html`<span class="reason">${s.needsAttentionReason}</span>`
           : html`<span class="muted">${STATE[s.state].blurb}${since ? ` · ${since}` : ""}</span>`}
       </div>
+      ${s.question
+        ? html`<div class="asking" title="What Claude is waiting on. Answer it in Claude; Claudette never approves anything.">
+            <span class="asking-title">💬 ${s.question.title}</span>
+            ${s.question.detail ? html`<code class="asking-detail">${s.question.detail}</code>` : null}
+            ${s.question.options.length ? html`<span class="muted"> · ${s.question.options.join(" / ")}</span>` : null}
+          </div>`
+        : null}
       <div class="session-stats">
         <span title="Active subagents (from Claude Code hooks)">
           ${helpers === null
@@ -365,6 +372,33 @@ function Diagnostics(props: { doctor: Doctor | null; snap: Snapshot | null }) {
 
 // ------------------------------------------------------------------ app
 
+function DisplayPrivacy(props: { prefs: Preferences | null; onChanged: () => void; toast: (m: string) => void }) {
+  const on = props.prefs?.questionText ?? false;
+  const toggle = async () => {
+    try {
+      await api.patchPreferences({ questionText: !on });
+      props.toast(!on ? "Displays will show what Claude is asking" : "Displays will only say that Claude needs you");
+      props.onChanged();
+    } catch (e) {
+      props.toast(e instanceof ApiError ? e.message : "Couldn't save that");
+    }
+  };
+  return html`<${Card} title="When Claude asks something">
+    <label class="toggle-row">
+      <input type="checkbox" checked=${on} disabled=${!props.prefs} onChange=${toggle} />
+      <span>
+        Show the question on my display
+        <span class="muted small block">
+          ${on
+            ? "Displays show the command, file name or question text. Answer it in Claude; Claudette never approves anything."
+            : "Displays only say what kind of thing Claude needs (e.g. \"Can I run this command?\")."}
+          Display traffic is plain HTTP on your network, so leave this off on shared Wi-Fi.
+        </span>
+      </span>
+    </label>
+  <//>`;
+}
+
 function App() {
   const status = usePoll(api.status, 3000);
   const prefs = usePoll(api.preferences, 5000);
@@ -437,6 +471,7 @@ function App() {
         ${(pairing.data?.requests.length ?? 0) === 0
           ? html`<${Pairing} requests=${pairing.data?.requests ?? []} onChanged=${refreshPairing} toast=${setToast} />`
           : null}
+        <${DisplayPrivacy} prefs=${prefs.data} onChanged=${refreshPrefs} toast=${setToast} />
         <${Devices} devices=${devices.data?.devices ?? null} onChanged=${refreshPairing} toast=${setToast} />
         <${Diagnostics} doctor=${doctor.data} snap=${snap} />
       </div>

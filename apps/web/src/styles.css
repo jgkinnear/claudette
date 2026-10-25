@@ -142,3 +142,10 @@ h2 { font-size: 18px; }
 
 .avatar { line-height: 0; padding-top: 2px; }
 .claudette { display: block; }
+
+.asking { margin: 4px 0 2px; font-size: 14px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.asking-title { color: var(--amber, #e8b04a); font-weight: 800; }
+.asking-detail { font-size: 12.5px; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.25); word-break: break-all; }
+.toggle-row { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.toggle-row input { margin-top: 4px; accent-color: var(--terracotta, #d97757); width: 18px; height: 18px; }
+.block { display: block; margin-top: 4px; }

@@ -8,6 +8,7 @@ import { SubagentLedger, type HookEvent } from "./subagents.js";
 import { TokenLedger, localDateString } from "./tokens.js";
 import { truncateChars } from "./agents.js";
 import type { RememberedSession } from "./store.js";
+import { QuestionBook, type Question } from "./questions.js";
 
 export interface DataSource {
   readonly mode: "real" | "mock";
@@ -19,6 +20,8 @@ export interface DataSource {
   /** Ids (opaque) currently known. */
   knownIds(): Set<string>;
   onHook(e: HookEvent): void;
+  /** A session started waiting on you (from PermissionRequest / AskUserQuestion / Notification hooks). */
+  onQuestion(sessionId: string, q: Question): void;
   limits: LimitsStore;
   diagnostics(): Record<string, unknown>;
 }
@@ -70,6 +73,7 @@ export class Collector implements DataSource {
   readonly tokens: TokenLedger;
   readonly limits: LimitsStore;
   private tracked = new Map<string, Tracked>();
+  private questions = new QuestionBook();
   private timer: NodeJS.Timeout | null = null;
   private polling = false;
   private polls = 0;
@@ -114,6 +118,12 @@ export class Collector implements DataSource {
   onHook(e: HookEvent): void {
     this.hookSeen = true;
     this.subagents.record(e);
+    if (e.event === "Stop" || e.event === "SessionEnd") this.questions.clear(e.sessionId);
+  }
+
+  onQuestion(sessionId: string, q: Question): void {
+    this.hookSeen = true;
+    this.questions.record(sessionId, q);
   }
 
   private fetch(): Promise<RawAgent[]> {
@@ -282,7 +292,23 @@ export class Collector implements DataSource {
         quality: ctx === null && (tok?.contextTokens ?? null) === null ? "unavailable" : "observed",
       },
       lastActivityAt: lastActivity ? new Date(lastActivity).toISOString() : null,
+      question: this.questionFor(sid, n.state),
     };
+  }
+
+  /**
+   * Show a question while the session needs you. A fresh one (under 10 s) also shows before the next
+   * `claude agents` poll catches up; once the session has moved on, it's dropped.
+   */
+  private questionFor(sid: string | null, state: Session["state"]): Session["question"] {
+    const q = this.questions.get(sid);
+    if (!q || !sid) return null;
+    const fresh = this.now() - q.askedAt < 10_000;
+    if (state !== "needs_attention" && !fresh) {
+      this.questions.clear(sid);
+      return null;
+    }
+    return { kind: q.kind, title: q.title, detail: q.detail, options: q.options, askedAt: new Date(q.askedAt).toISOString() };
   }
 
   snapshot(): Snapshot {

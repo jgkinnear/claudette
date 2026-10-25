@@ -37,6 +37,11 @@ export const PreferencesSchema = z.object({
   /** Pinned session ids in display order. */
   pinOrder: z.array(z.string().max(32)).max(64).default([]),
   aliases: z.record(z.string().max(32), z.string().max(64)).default({}),
+  /**
+   * Send what Claude is asking (commands, file names, question text) to displays. Off by default:
+   * displays then only get the headline, e.g. "Can I run this command?".
+   */
+  questionText: z.boolean().default(false),
   /** Last known details of pinned sessions (keyed by opaque id). Never sent to devices. */
   remembered: z.record(z.string().max(32), RememberedSessionSchema).default({}),
 });

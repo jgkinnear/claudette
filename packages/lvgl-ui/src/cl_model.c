@@ -328,6 +328,26 @@ static void parse_session(const parser_t *p, int o, int64_t now, cl_session_t *s
     double pct;
     int ctx = get(p, o, "context");
     s->context_tokens = get_i64(p, ctx, "tokens");
+
+    int q = get(p, o, "question");
+    if (!is_null(p, q) && p->t[q].type == JSMN_OBJECT) {
+        int kind = get(p, q, "kind");
+        s->q_kind = kind >= 0 && tok_is(p, kind, "question") ? CL_Q_QUESTION
+                    : kind >= 0 && tok_is(p, kind, "notice") ? CL_Q_NOTICE
+                                                              : CL_Q_PERMISSION;
+        get_string(p, q, "title", s->q_title, sizeof(s->q_title));
+        get_string(p, q, "detail", s->q_detail, sizeof(s->q_detail));
+        s->q_age_s = get_age(p, q, "askedAt", now);
+        int opts = get(p, q, "options");
+        if (opts >= 0 && p->t[opts].type == JSMN_ARRAY) {
+            int j = opts + 1;
+            for (int k = 0; k < p->t[opts].size; k++) {
+                if (s->q_option_count < CL_MAX_Q_OPTIONS && p->t[j].type == JSMN_STRING)
+                    copy_json_string(p, j, s->q_options[s->q_option_count++], CL_MAX_Q_OPTION);
+                j = skip(p, j);
+            }
+        }
+    }
     s->context_pct = (int8_t)(get_number(p, ctx, "usedPercent", &pct) ? (pct < 0 ? 0 : pct > 100 ? 100 : (int)(pct + 0.5))
                                                                         : CL_UNKNOWN);
 }

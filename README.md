@@ -7,11 +7,10 @@ are **working**, which **need you**, how many subagents (her *little helpers*) a
 used today. It runs on a small ESP32-S3 touchscreen that sits next to your keyboard, powered from any USB charger.
 
 - **Local-first.** A small service on your Mac reads Claude Code's own status locally. No cloud, no API key.
-- **Honest.** Unknown stays unknown. It never shows a made-up zero or a fake progress bar.
 - **One UI, two runtimes.** The same LVGL C code runs on the device and in your browser.
 
-**[▶ Try it in your browser](https://jgkinnear.github.io/claudette/)**: the real device UI, compiled to WebAssembly,
-with demo data.
+**▶ Try it in your browser: coming soon.** The real device UI, compiled to WebAssembly, with demo data. Until then,
+run it locally with `pnpm dev:sim` (see [Hacking on it](#hacking-on-it)).
 
 > Claudette is an unofficial hobby project. It is not affiliated with or endorsed by Anthropic.
 
@@ -61,8 +60,6 @@ pnpm flash          # 4.0" FNK0104S
 pnpm flash:3.5in    # 3.5" FNK0104N
 ```
 
-Flashed the wrong one? Nothing breaks: the screen just stays black. Flash the other command.
-
 The first build downloads the ESP32 toolchain (a few hundred MB). If the port isn't found, hold **BOOT**, tap **RST**,
 and run it again. `pnpm monitor` shows the serial log.
 
@@ -111,15 +108,28 @@ Wi-Fi), enter your Mac's address manually in the setup page. Recovery, pins and 
 
 ## How it works
 
-```text
-Claude Code ──► claudette service (Node, on your Mac) ──Wi-Fi──► ESP32-S3 (LVGL)
-  claude agents --json        normalised JSON snapshot              same LVGL UI ──► WebAssembly demo
-  subagent hooks (HTTP)       paired-device tokens
-  transcript usage (read-only)
+```mermaid
+flowchart LR
+    subgraph mac["Your Mac"]
+        cc["Claude Code sessions"]
+        svc["Claudette service<br/>(Node, runs at login)"]
+        web["Settings page<br/>localhost:3333"]
+        cc -- "claude agents --json<br/>(every 5 s)" --> svc
+        cc -- "hooks: subagents and<br/>what it's asking" --> svc
+        cc -- "transcripts<br/>(token counts only)" --> svc
+        svc --- web
+    end
+    subgraph desk["On your desk"]
+        dev["Claudette display<br/>ESP32-S3 + LVGL"]
+    end
+    sim["Browser simulator<br/>same UI as WebAssembly"]
+    svc -. "Bonjour: _claudette._tcp" .-> dev
+    dev -- "paired, polls a small JSON snapshot<br/>over Wi-Fi every 3 s" --> svc
+    sim -. "demo data or live from your Mac" .-> svc
 ```
 
-The service polls `claude agents --json --all` for session states, receives `SubagentStart`/`SubagentStop` hooks,
-and reads token usage from local transcripts (numbers only). The display polls a small authenticated JSON snapshot
+The service polls `claude agents --json --all` for session states and receives Claude Code's hooks for subagents and
+for what a waiting session is asking. It also reads token counts and context size from local transcripts (numbers only). The display polls a small authenticated JSON snapshot
 every few seconds. Details: [docs/architecture.md](docs/architecture.md).
 
 ## Privacy & security

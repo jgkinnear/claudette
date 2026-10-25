@@ -11,6 +11,7 @@ import { applyPreferences, deviceView } from "./snapshot.js";
 import { DeviceRegistry, PairingManager, RateLimiter, safeEqual } from "./security.js";
 import type { Preferences } from "./store.js";
 import type { HookEventName } from "./subagents.js";
+import { questionFromHook } from "./questions.js";
 
 export interface PreferencesProvider {
   get(): Preferences;
@@ -232,6 +233,7 @@ const AdminPrefsPatch = z.object({
   pins: z.array(z.object({ sessionId: z.string().max(32), pinned: z.boolean() })).max(64).optional(),
   pinOrder: z.array(z.string().max(32)).max(64).optional(),
   aliases: z.record(z.string().max(32), z.string().max(200).nullable()).optional(),
+  questionText: z.boolean().optional(),
 });
 
 export function createHttpServer(deps: ServerDeps): Server {
@@ -293,7 +295,7 @@ export function createHttpServer(deps: ServerDeps): Server {
 
   function prefsView() {
     const p = deps.prefs.get();
-    return { pinOrder: [...p.pinOrder], aliases: { ...p.aliases } };
+    return { pinOrder: [...p.pinOrder], aliases: { ...p.aliases }, questionText: p.questionText };
   }
 
   async function handleDevice(req: IncomingMessage, res: ServerResponse, path: string, url: URL): Promise<void> {
@@ -381,6 +383,7 @@ export function createHttpServer(deps: ServerDeps): Server {
             else delete p.aliases[id];
           }
         }
+        if (parsed.data.questionText !== undefined) p.questionText = parsed.data.questionText;
         deps.prefs.save();
         return send(res, 200, prefsView());
       }
@@ -443,6 +446,8 @@ export function createHttpServer(deps: ServerDeps): Server {
       return send(res, 204, undefined);
     }
     const f = pickHookFields(raw, parsed);
+    const question = f.sessionId ? questionFromHook(parsed, now()) : null;
+    if (question && f.sessionId) deps.source.onQuestion(f.sessionId, question);
     if (f.event && f.sessionId && HOOK_EVENTS.has(f.event as HookEventName)) {
       deps.source.onHook({
         event: f.event as HookEventName,

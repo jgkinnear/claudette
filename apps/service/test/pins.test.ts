@@ -59,14 +59,14 @@ describe("pinned sessions", () => {
     const prefs = {
       pinOrder: ["s-remembered"],
       remembered: {
-        "s-remembered": { name: "Trip Start Logic", kind: "interactive" as const, claudeSessionId: "zzz", startedAtMs: null },
+        "s-remembered": { name: "Weekend side project", kind: "interactive" as const, claudeSessionId: "zzz", startedAtMs: null },
       },
     };
     const { c, view, setRows } = setup(prefs);
     setRows([live("a", "Something running", "busy")]);
     await c.poll();
     expect(view().map((s) => [s.displayName, s.state, s.pinned])).toEqual([
-      ["Trip Start Logic", "stopped", true],
+      ["Weekend side project", "stopped", true],
       ["Something running", "working", false],
     ]);
     expect(c.knownIds().has("s-remembered")).toBe(true); // so it can still be unpinned / reordered

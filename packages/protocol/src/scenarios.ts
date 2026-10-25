@@ -172,9 +172,17 @@ export const scenarios: Scenario[] = [
         api.state = "needs_attention";
         api.needsAttentionReason = "permission prompt";
         api.stateSince = now.toISOString();
+        api.question = {
+          kind: "permission",
+          title: "Can I run this command?",
+          detail: "stripe listen --forward-to localhost:4000/webhooks",
+          options: [],
+          askedAt: now.toISOString(),
+        };
       } else if (phase === 8) {
         api.state = "working";
         api.needsAttentionReason = null;
+        api.question = null;
         api.stateSince = now.toISOString();
       } else if (phase === 0) {
         api.state = "ready";
@@ -222,6 +230,13 @@ export const scenarios: Scenario[] = [
           state: "needs_attention",
           needsAttentionReason: "permission prompt",
           stateSince: ago(now, 48),
+          question: {
+            kind: "permission",
+            title: "Can I run this command?",
+            detail: "pnpm db:migrate --env=staging",
+            options: [],
+            askedAt: ago(now, 48),
+          },
           context: { usedPercent: 54, tokens: 108_000, quality: "observed" },
         }),
         session(now, {
@@ -339,6 +354,13 @@ export const scenarios: Scenario[] = [
           pinOrder: 0,
           state: "needs_attention",
           needsAttentionReason: "input needed",
+          question: {
+            kind: "question",
+            title: "Retry strategy",
+            detail: "How should I stop duplicate charges when the payment provider times out?",
+            options: ["Idempotency keys", "Lock the order row", "Both"],
+            askedAt: ago(now, 120),
+          },
         }),
         session(now, {
           displayName: "Café menü — ünïcödé naïve façade résumé",

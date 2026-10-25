@@ -25,6 +25,10 @@ extern "C" {
 #define CL_MAX_AGENT_TYPE 25
 #define CL_MAX_HOST 41
 #define CL_MAX_MESSAGE 81
+#define CL_MAX_Q_TITLE 41
+#define CL_MAX_Q_DETAIL 161
+#define CL_MAX_Q_OPTIONS 4
+#define CL_MAX_Q_OPTION 29
 
 /** "Unknown" sentinel for integer metrics. Unavailable is never zero. */
 #define CL_UNKNOWN (-1)
@@ -37,6 +41,14 @@ typedef enum {
     CL_STATE_FAILED,
     CL_STATE_STOPPED,
 } cl_state_t;
+
+/* What a waiting session is asking (display only; answer on the Mac). */
+typedef enum {
+    CL_Q_NONE = 0,
+    CL_Q_PERMISSION,
+    CL_Q_QUESTION,
+    CL_Q_NOTICE,
+} cl_question_kind_t;
 
 typedef enum {
     CL_QUALITY_UNAVAILABLE = 0,
@@ -76,6 +88,13 @@ typedef struct {
     int64_t context_tokens;         /* tokens in the context window now, CL_UNKNOWN if unavailable */
 
     int32_t last_activity_age_s;
+
+    cl_question_kind_t q_kind;      /* CL_Q_NONE when it isn't asking anything */
+    char q_title[CL_MAX_Q_TITLE];
+    char q_detail[CL_MAX_Q_DETAIL]; /* "" when details are off or unknown */
+    uint8_t q_option_count;
+    char q_options[CL_MAX_Q_OPTIONS][CL_MAX_Q_OPTION];
+    int32_t q_age_s;
 } cl_session_t;
 
 typedef struct {

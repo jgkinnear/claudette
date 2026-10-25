@@ -60,7 +60,7 @@ export async function staticChecks(paths: Paths, config: Config, opts: { port?: 
   });
 
   let settingsOk = true;
-  let hooks = { installed: false, events: [] as string[], ports: [] as number[] };
+  let hooks = { installed: false, questions: false, events: [] as string[], ports: [] as number[] };
   let sl: "none" | "ours" | "other" = "none";
   try {
     const s = readSettings(paths.claudeSettings);
@@ -82,6 +82,15 @@ export async function staticChecks(paths: Paths, config: Config, opts: { port?: 
           ? `installed for port ${stalePorts.join(", ")}, but the service uses ${port}`
           : "not installed: subagent counts are unavailable",
       ...(hooks.installed ? {} : { fix: "Run `claudette setup` to add them." }),
+    });
+    checks.push({
+      id: "question-hooks",
+      label: "Question hooks (what a waiting session is asking)",
+      ok: hooks.questions ? true : null,
+      detail: hooks.questions
+        ? "installed: displays can show what Claude is asking (Claudette never answers)"
+        : "not installed: displays only know that a session needs you",
+      ...(hooks.questions ? {} : { fix: "Run `claudette setup` again to add them." }),
     });
     checks.push({
       id: "statusline",

@@ -6,6 +6,8 @@ export type Session = Snapshot["sessions"][number];
 export interface Preferences {
   pinOrder: string[];
   aliases: Record<string, string>;
+  /** Send what Claude is asking (commands, file names, question text) to displays. */
+  questionText: boolean;
 }
 
 export interface PairingRequest {
@@ -79,6 +81,7 @@ export const api = {
     pins?: Array<{ sessionId: string; pinned: boolean }>;
     pinOrder?: string[];
     aliases?: Record<string, string | null>;
+    questionText?: boolean;
   }) => call<Preferences>("PATCH", "/admin/api/preferences", patch),
   pairing: () => call<{ requests: PairingRequest[] }>("GET", "/admin/api/pairing"),
   approve: (id: string, code: string) => call<{ status: string }>("POST", `/admin/api/pairing/${encodeURIComponent(id)}/approve`, { code }),

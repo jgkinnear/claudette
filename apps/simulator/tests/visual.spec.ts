@@ -35,12 +35,12 @@ for (const sc of scenarios) {
 }
 
 test("tapping a session opens its detail, Back returns", async ({ page }) => {
-  await open(page, "scenario=needs-you");
+  await open(page, "scenario=finished");
   const home = await activeScreen(page);
   await tap(page, 200, 95);
   await pump(page, 400);
   expect(await activeScreen(page)).not.toBe(home);
-  await expect(page.locator("#screen")).toHaveScreenshot("detail-needs-you.png");
+  await expect(page.locator("#screen")).toHaveScreenshot("detail-finished.png");
   await tap(page, 40, 26);
   await pump(page, 400);
   expect(await activeScreen(page)).toBe(home);
@@ -117,4 +117,24 @@ test("BOOT button rotates a quarter turn per press", async ({ page }) => {
   await pump(page, 600);
   expect(await page.evaluate(() => localStorage.getItem("claudette.rotation"))).toBe("1");
   await expect(page.locator("#screen-wrap")).toHaveScreenshot("boot-rotated.png");
+});
+
+test("a waiting session pops up full screen; Got it dismisses it for good; tapping its card reopens it", async ({ page }) => {
+  await open(page, "scenario=needs-you");
+  const asking = await activeScreen(page);
+  await expect(page.locator("#screen")).toHaveScreenshot("ask-permission.png");
+  await tap(page, 160, 358); // Got it
+  await pump(page, 400);
+  const home = await activeScreen(page);
+  expect(home).not.toBe(asking);
+  await pump(page, 4000); // later snapshots don't bring the same question back
+  expect(await activeScreen(page)).toBe(home);
+  await tap(page, 200, 95); // the waiting session's card
+  await pump(page, 400);
+  expect(await activeScreen(page)).toBe(asking);
+});
+
+test("multiple-choice questions show their options", async ({ page }) => {
+  await open(page, "scenario=long-names");
+  await expect(page.locator("#screen")).toHaveScreenshot("ask-question.png");
 });

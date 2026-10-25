@@ -102,7 +102,8 @@ static struct {
 
     /* home */
     lv_obj_t *featured, *rows, *tiles_box, *hint, *empty, *layout_icon, *nav;
-    lv_obj_t *strip_today, *strip_5h_bar, *strip_5h_lbl, *strip_wk_bar, *strip_wk_lbl;
+    lv_obj_t *strip, *strip_today, *strip_5h, *strip_5h_bar, *strip_5h_lbl, *strip_wk, *strip_wk_bar, *strip_wk_lbl;
+    int8_t strip_shown; /* -1 unknown, 0 hidden, 1 shown */
     bool tiles_mode;
     tile_t tiles[CL_MAX_SESSIONS];
     uint8_t tile_count;
@@ -135,6 +136,14 @@ static struct {
     lv_obj_t *scr, *slider, *motion, *rot_lbl, *wifi, *ip, *host, *fw, *reset_lbl;
     bool reset_armed;
 } set;
+
+/* The full-screen "Claudette is asking" screen (see build_ask). */
+static struct {
+    lv_obj_t *scr, *count, *who, *since, *mascot, *bubble, *title, *detail_box, *detail, *opts, *hint, *next_btn;
+    char id[CL_MAX_ID];
+} ask;
+static void ask_refresh(void);
+static void ask_sync(void);
 
 static uint8_t rotation_q; /* quarter turns currently applied */
 static void apply_rotation(uint8_t q, bool notify);
@@ -251,6 +260,7 @@ static void fmt_helpers(char *buf, size_t size, const cl_session_t *s)
 /* ------------------------------------------------------------------ navigation */
 
 static void open_detail(const char *id);
+static void ask_open(const char *id);
 static void open_settings(lv_event_t *e);
 static void refresh_detail(void);
 
@@ -278,7 +288,12 @@ static void toggle_pin(const char *id)
 static void session_event(lv_event_t *e)
 {
     const char *id = (const char *)lv_event_get_user_data(e);
-    if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) toggle_pin(id);
+    if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+        toggle_pin(id);
+        return;
+    }
+    const cl_session_t *s = find_session(id);
+    if (s && s->state == CL_STATE_NEEDS_ATTENTION) ask_open(id); /* what is it asking? */
     else open_detail(id);
 }
 
@@ -580,6 +595,8 @@ static void strip_limit(lv_obj_t *bar, lv_obj_t *lbl, const cl_rate_window_t *w)
     lv_label_set_text_fmt(lbl, "%d%%", w->used_pct);
 }
 
+/* The strip only appears when Claude has reported at least one plan limit; otherwise the
+ * pages take its space (today's total is still on the Usage page). */
 static void update_strip(void)
 {
     char today[16];
@@ -587,9 +604,19 @@ static void update_strip(void)
     lv_label_set_text_fmt(d.strip_today, "Today %s", today);
     strip_limit(d.strip_5h_bar, d.strip_5h_lbl, &snap.five_hour);
     strip_limit(d.strip_wk_bar, d.strip_wk_lbl, &snap.seven_day);
+    show(d.strip_5h, snap.five_hour.present);
+    show(d.strip_wk, snap.seven_day.present);
+
+    const int8_t want = (snap.five_hour.present || snap.seven_day.present) ? 1 : 0;
+    if (want == d.strip_shown) return;
+    d.strip_shown = want;
+    show(d.strip, want);
+    const int32_t h = PAGE_H + (want ? 0 : STRIP_H);
+    lv_obj_set_height(d.pager, h);
+    for (int i = 0; i < 3; i++) lv_obj_set_height(d.pages[i], h);
 }
 
-static void strip_group(lv_obj_t *parent, const char *name, int32_t bar_w, lv_obj_t **bar, lv_obj_t **lbl)
+static lv_obj_t *strip_group(lv_obj_t *parent, const char *name, int32_t bar_w, lv_obj_t **bar, lv_obj_t **lbl)
 {
     lv_obj_t *g = cl_box(parent);
     lv_obj_set_flex_flow(g, LV_FLEX_FLOW_ROW);
@@ -600,11 +627,14 @@ static void strip_group(lv_obj_t *parent, const char *name, int32_t bar_w, lv_ob
     lv_obj_set_height(*bar, 6);
     *lbl = cl_label(g, &cl_font_12, CL_C_CREAM_DIM, "");
     lv_obj_set_width(*lbl, 28);
+    return g;
 }
 
 static void build_strip(lv_obj_t *scr)
 {
     lv_obj_t *s = cl_box(scr);
+    d.strip = s;
+    d.strip_shown = -1;
     lv_obj_set_pos(s, RAIL_W, HEADER_H + PAGE_H);
     lv_obj_set_size(s, PAGE_W, STRIP_H);
     lv_obj_set_style_pad_hor(s, 10, 0);
@@ -617,8 +647,8 @@ static void build_strip(lv_obj_t *scr)
     lv_obj_set_flex_align(s, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     d.strip_today = cl_label(s, &cl_font_12, CL_C_CREAM_DIM, "");
     int32_t bar_w = LAND ? 90 : 40;
-    strip_group(s, "5h", bar_w, &d.strip_5h_bar, &d.strip_5h_lbl);
-    strip_group(s, "Week", bar_w, &d.strip_wk_bar, &d.strip_wk_lbl);
+    d.strip_5h = strip_group(s, "5h", bar_w, &d.strip_5h_bar, &d.strip_5h_lbl);
+    d.strip_wk = strip_group(s, "Week", bar_w, &d.strip_wk_bar, &d.strip_wk_lbl);
 }
 
 /* Tile mode: every session as an equal tile, in the service's order (pinned first). */
@@ -1075,6 +1105,8 @@ static void second_tick(lv_timer_t *t)
         refresh_times();
     } else if (lv_screen_active() == det.scr) {
         refresh_detail();
+    } else if (lv_screen_active() == ask.scr) {
+        ask_refresh();
     }
 }
 
@@ -1741,29 +1773,289 @@ void cl_ui_show_message(const char *title, const char *body, const char *action_
     }
 }
 
+/* ------------------------------------------------------------------ "Claudette is asking" (full screen)
+ * When a session needs you, its Claudette takes over the screen and says what Claude is asking.
+ * Display only: you answer on your Mac. Pops up once per question; "Got it" dismisses it, and it
+ * closes by itself once the session stops waiting. */
+
+#define ASK_SEEN 16
+
+
+/* Questions already shown or dismissed: session id + title + when it was asked (uptime s). */
+static struct {
+    char id[CL_MAX_ID];
+    char title[CL_MAX_Q_TITLE];
+    int32_t asked_s;
+} ask_seen[ASK_SEEN];
+static uint8_t ask_seen_next;
+
+static const char *ask_title(const cl_session_t *s)
+{
+    return s->q_kind != CL_Q_NONE && s->q_title[0] ? s->q_title : "I need you for a moment";
+}
+
+static int32_t ask_asked_s(const cl_session_t *s)
+{
+    int32_t age = s->q_kind != CL_Q_NONE ? s->q_age_s : s->state_age_s;
+    return (int32_t)(snap_tick / 1000) - (age < 0 ? 0 : age);
+}
+
+static bool ask_was_seen(const cl_session_t *s)
+{
+    const int32_t asked = ask_asked_s(s);
+    for (uint8_t i = 0; i < ASK_SEEN; i++) {
+        if (strcmp(ask_seen[i].id, s->id) != 0 || strcmp(ask_seen[i].title, ask_title(s)) != 0) continue;
+        int32_t dt = ask_seen[i].asked_s - asked;
+        if (dt < 0) dt = -dt;
+        if (dt <= 15) return true;
+    }
+    return false;
+}
+
+static void ask_mark_seen(const cl_session_t *s)
+{
+    if (ask_was_seen(s)) return;
+    snprintf(ask_seen[ask_seen_next].id, CL_MAX_ID, "%s", s->id);
+    snprintf(ask_seen[ask_seen_next].title, CL_MAX_Q_TITLE, "%s", ask_title(s));
+    ask_seen[ask_seen_next].asked_s = ask_asked_s(s);
+    ask_seen_next = (uint8_t)((ask_seen_next + 1) % ASK_SEEN);
+}
+
+static uint8_t waiting_count(void)
+{
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < snap.session_count; i++) n += snap.sessions[i].state == CL_STATE_NEEDS_ATTENTION;
+    return n;
+}
+
+static void ask_refresh(void)
+{
+    const cl_session_t *s = find_session(ask.id);
+    if (!s) return;
+    char buf[96], age[16];
+    lv_label_set_text(ask.who, s->name[0] ? s->name : "A session");
+    cl_fmt_age(age, sizeof(age), live_age(s->q_kind != CL_Q_NONE ? s->q_age_s : s->state_age_s));
+    snprintf(buf, sizeof(buf), "waiting %s", age);
+    if (strcmp(age, "now") == 0) snprintf(buf, sizeof(buf), "just asked");
+    lv_label_set_text(ask.since, buf);
+    lv_label_set_text(ask.title, ask_title(s));
+
+    /* Commands read best in an inset box; question text and notices as plain words. */
+    const char *detail = s->q_detail[0] ? s->q_detail : (s->q_kind == CL_Q_NONE && s->reason[0] ? s->reason : "");
+    const bool code = s->q_kind == CL_Q_PERMISSION && s->q_detail[0];
+    show(ask.detail_box, detail[0] != 0);
+    lv_label_set_text(ask.detail, detail);
+    lv_obj_set_style_bg_opa(ask.detail_box, code ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+    lv_obj_set_style_pad_all(ask.detail_box, code ? 8 : 0, 0);
+    lv_obj_set_style_text_font(ask.detail, code ? &cl_font_14 : &cl_font_16, 0);
+
+    lv_obj_clean(ask.opts);
+    for (uint8_t i = 0; i < s->q_option_count; i++) {
+        lv_obj_t *chip = cl_box(ask.opts);
+        lv_obj_set_style_border_color(chip, CL_HEX(CL_C_BG), 0);
+        lv_obj_set_style_border_width(chip, 2, 0);
+        lv_obj_set_style_border_opa(chip, LV_OPA_40, 0);
+        lv_obj_set_style_radius(chip, 12, 0);
+        lv_obj_set_style_pad_hor(chip, 10, 0);
+        lv_obj_set_style_pad_ver(chip, 3, 0);
+        cl_label(chip, &cl_font_14, CL_C_BG, s->q_options[i]);
+    }
+    show(ask.opts, s->q_option_count > 0);
+
+    const uint8_t waiting = waiting_count();
+    show(ask.next_btn, waiting > 1);
+    if (waiting > 1) lv_label_set_text_fmt(ask.count, "%d waiting", waiting);
+    else lv_label_set_text(ask.count, "");
+    cl_mascot_set_mood(ask.mascot, CL_MOOD_NEEDS_YOU);
+}
+
+static void ask_close(void)
+{
+    ask.id[0] = '\0';
+    load(d.scr);
+}
+
+static void ask_ok(lv_event_t *e)
+{
+    (void)e;
+    const cl_session_t *s = find_session(ask.id);
+    if (s) ask_mark_seen(s);
+    ask_close();
+}
+
+static void ask_next(lv_event_t *e)
+{
+    (void)e;
+    const cl_session_t *cur = find_session(ask.id);
+    if (cur) ask_mark_seen(cur);
+    /* the next waiting session after this one, wrapping around */
+    int start = 0;
+    for (uint8_t i = 0; i < snap.session_count; i++)
+        if (strcmp(snap.sessions[i].id, ask.id) == 0) start = i + 1;
+    for (uint8_t k = 0; k < snap.session_count; k++) {
+        const cl_session_t *s = &snap.sessions[(start + k) % snap.session_count];
+        if (s->state == CL_STATE_NEEDS_ATTENTION && strcmp(s->id, ask.id) != 0) {
+            ask_open(s->id);
+            return;
+        }
+    }
+}
+
+static void ask_open(const char *id)
+{
+    snprintf(ask.id, sizeof(ask.id), "%s", id);
+    cl_mascot_set_look(ask.mascot, ask.id);
+    ask_refresh();
+    lv_obj_scroll_to_y(lv_obj_get_child(ask.scr, 1), 0, LV_ANIM_OFF);
+    const cl_session_t *s = find_session(id);
+    if (s) ask_mark_seen(s);
+    load(ask.scr);
+}
+
+static void build_ask(void)
+{
+    ask.scr = cl_screen();
+    lv_obj_t *bar = cl_box(ask.scr);
+    lv_obj_set_size(bar, SW, HEADER_H);
+    lv_obj_set_style_pad_hor(bar, 4, 0);
+    lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *back = lv_button_create(bar);
+    lv_obj_remove_style_all(back);
+    lv_obj_set_size(back, 92, 44);
+    lv_obj_set_style_radius(back, 22, 0);
+    lv_obj_set_style_bg_color(back, CL_HEX(CL_C_PANEL_HI), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(back, LV_OPA_COVER, LV_STATE_PRESSED);
+    lv_obj_center(cl_label(back, &cl_font_16, CL_C_CREAM_DIM, LV_SYMBOL_LEFT " Home"));
+    lv_obj_add_event_cb(back, ask_ok, LV_EVENT_CLICKED, NULL);
+    ask.count = cl_label(bar, &cl_font_12, CL_C_AMBER, "");
+    lv_obj_set_style_pad_right(ask.count, 10, 0);
+
+    lv_obj_t *body = lv_obj_create(ask.scr);
+    lv_obj_remove_style_all(body);
+    lv_obj_set_pos(body, 0, HEADER_H);
+    lv_obj_set_size(body, SW, SH - HEADER_H);
+    lv_obj_set_style_pad_hor(body, 16, 0);
+    lv_obj_set_style_pad_bottom(body, 14, 0);
+    lv_obj_set_style_pad_row(body, 8, 0);
+    lv_obj_set_style_pad_column(body, 14, 0);
+    lv_obj_set_flex_flow(body, LAND ? LV_FLEX_FLOW_ROW : LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LAND ? LV_FLEX_ALIGN_START : LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_scroll_dir(body, LV_DIR_VER);
+
+    /* Claudette, with the session's name under her */
+    lv_obj_t *me = cl_box(body);
+    lv_obj_set_flex_flow(me, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(me, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(me, 2, 0);
+    if (LAND) lv_obj_set_width(me, 120);
+    ask.mascot = cl_mascot_create(me, 5);
+    ask.who = cl_label(me, &cl_font_16, CL_C_CREAM, "");
+    lv_obj_set_width(ask.who, LAND ? 120 : SW - 32);
+    lv_label_set_long_mode(ask.who, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_style_text_align(ask.who, LV_TEXT_ALIGN_CENTER, 0);
+    ask.since = cl_label(me, &cl_font_12, CL_C_AMBER, "");
+
+    /* the speech bubble */
+    lv_obj_t *col = cl_box(body);
+    lv_obj_set_flex_flow(col, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(col, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(col, 10, 0);
+    const int32_t bw = LAND ? SW - 32 - 120 - 14 : SW - 32;
+    lv_obj_set_width(col, bw);
+    ask.bubble = cl_box(col);
+    lv_obj_set_width(ask.bubble, bw);
+    lv_obj_set_style_bg_color(ask.bubble, CL_HEX(CL_C_CREAM), 0);
+    lv_obj_set_style_bg_opa(ask.bubble, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(ask.bubble, 18, 0);
+    lv_obj_set_style_pad_all(ask.bubble, 14, 0);
+    lv_obj_set_style_pad_row(ask.bubble, 10, 0);
+    lv_obj_set_flex_flow(ask.bubble, LV_FLEX_FLOW_COLUMN);
+    ask.title = cl_label(ask.bubble, &cl_font_20, CL_C_BG, "");
+    lv_obj_set_width(ask.title, bw - 28);
+    lv_label_set_long_mode(ask.title, LV_LABEL_LONG_MODE_WRAP);
+    ask.detail_box = cl_box(ask.bubble);
+    lv_obj_set_width(ask.detail_box, bw - 28);
+    lv_obj_set_style_bg_color(ask.detail_box, CL_HEX(0xE6D9C6), 0);
+    lv_obj_set_style_radius(ask.detail_box, 8, 0);
+    ask.detail = cl_label(ask.detail_box, &cl_font_16, 0x2A2F3A, "");
+    lv_obj_set_width(ask.detail, LV_PCT(100));
+    lv_label_set_long_mode(ask.detail, LV_LABEL_LONG_MODE_WRAP);
+    ask.opts = cl_box(ask.bubble);
+    lv_obj_set_width(ask.opts, bw - 28);
+    lv_obj_set_flex_flow(ask.opts, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_style_pad_row(ask.opts, 6, 0);
+    lv_obj_set_style_pad_column(ask.opts, 6, 0);
+
+    ask.hint = cl_label(col, &cl_font_12, CL_C_MUTED, "Answer on your Mac. I can't approve things from here.");
+    lv_obj_set_width(ask.hint, bw);
+    lv_label_set_long_mode(ask.hint, LV_LABEL_LONG_MODE_WRAP);
+    lv_obj_set_style_text_align(ask.hint, LV_TEXT_ALIGN_CENTER, 0);
+
+    lv_obj_t *btns = cl_box(col);
+    lv_obj_set_flex_flow(btns, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(btns, 8, 0);
+    lv_obj_t *ok = cl_button(btns, "Got it", CL_C_TERRACOTTA, ask_ok, NULL);
+    lv_obj_set_width(ok, 120);
+    ask.next_btn = cl_button(btns, "Next " LV_SYMBOL_RIGHT, CL_C_AMBER, ask_next, NULL);
+    lv_obj_set_width(ask.next_btn, 120);
+}
+
+/* Called after every snapshot: pop up new questions, close answered ones. */
+static void ask_sync(void)
+{
+    /* A screen that's still fading in counts as the one you're on. */
+    lv_obj_t *loading = lv_display_get_screen_loading(lv_display_get_default());
+    lv_obj_t *active = loading ? loading : lv_screen_active();
+    if (active == ask.scr) {
+        const cl_session_t *s = find_session(ask.id);
+        if (!s || s->state != CL_STATE_NEEDS_ATTENTION) {
+            ask_close();
+            show_toast("All sorted, thanks!");
+        } else {
+            ask_refresh();
+        }
+        return;
+    }
+    if (active != d.scr && active != det.scr) return; /* don't interrupt settings or setup */
+    if (link_state != CL_LINK_LIVE) return;
+    for (uint8_t i = 0; i < snap.session_count; i++) {
+        const cl_session_t *s = &snap.sessions[i];
+        if (s->state == CL_STATE_NEEDS_ATTENTION && !ask_was_seen(s)) {
+            ask_open(s->id);
+            return;
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ rotation */
 
 /* Redo the whole UI for the new screen shape, keeping what you were looking at. */
 static void rebuild_all(void)
 {
     lv_obj_t *active = lv_screen_active();
-    bool on_detail = active == det.scr, on_settings = active == set.scr;
+    bool on_detail = active == det.scr, on_settings = active == set.scr, on_ask = ask.scr && active == ask.scr;
+    char ask_id[CL_MAX_ID];
+    snprintf(ask_id, sizeof(ask_id), "%s", ask.id);
     bool on_onb = onb.scr && active == onb.scr && onb_last.kind != ONB_NONE;
     char detail_id[CL_MAX_ID];
     snprintf(detail_id, sizeof(detail_id), "%s", det.id);
     uint8_t page = d.page;
     bool tiles = d.tiles_mode;
-    lv_obj_t *old[] = {d.scr, det.scr, set.scr, onb.scr};
+    lv_obj_t *old[] = {d.scr, det.scr, set.scr, onb.scr, ask.scr};
 
     compute_geometry();
     memset(&d, 0, sizeof(d));
     memset(&det, 0, sizeof(det));
     memset(&set, 0, sizeof(set));
+    memset(&ask, 0, sizeof(ask));
     onb.scr = NULL;
     onb.body = NULL;
     build_dashboard();
     build_detail();
     build_settings();
+    build_ask();
     d.tiles_mode = tiles;
     lv_image_set_src(d.layout_icon, tiles ? &cl_spr_ico_list_x2 : &cl_spr_ico_grid_x2);
     lv_obj_align(toast, LV_ALIGN_BOTTOM_MID, RAIL_W / 2, -NAV_H - STRIP_H - 44);
@@ -1781,6 +2073,10 @@ static void rebuild_all(void)
         cl_mascot_set_look(det.mascot, det.id);
         refresh_detail();
         lv_screen_load(det.scr);
+    }
+    if (on_ask && ask_id[0]) {
+        ask_open(ask_id);
+        lv_screen_load(ask.scr);
     }
     if (on_onb) {
         /* Replay the setup screen from copies (the public calls record what they're given). */
@@ -1843,6 +2139,7 @@ void cl_ui_init(const cl_platform_t *platform)
     build_dashboard();
     build_detail();
     build_settings();
+    build_ask();
 
     toast = cl_box(lv_layer_top());
     lv_obj_set_style_bg_color(toast, CL_HEX(CL_C_CREAM), 0);
@@ -1879,14 +2176,17 @@ void cl_ui_set_snapshot(const cl_snapshot_t *s)
     update_usage();
     update_header();
     if (lv_screen_active() == det.scr) refresh_detail();
+    if (ask.scr) ask_sync();
 }
 
 void cl_ui_set_link(cl_link_t link, uint32_t last_ok_age_s)
 {
+    const bool went_live = link == CL_LINK_LIVE && link_state != CL_LINK_LIVE;
     link_state = link;
     link_age_s = last_ok_age_s;
     link_tick = lv_tick_get();
     update_header();
+    if (went_live && ask.scr) ask_sync();
 }
 
 void cl_ui_set_device_info(const cl_device_info_t *info)

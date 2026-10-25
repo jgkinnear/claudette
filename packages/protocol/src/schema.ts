@@ -69,6 +69,18 @@ export const Context = z.object({
 });
 export type Context = z.infer<typeof Context>;
 
+export const Question = z.object({
+  kind: z.enum(["permission", "question", "notice"]),
+  /** Short headline in Claudette's voice, e.g. "Can I run this command?". */
+  title: z.string().max(60),
+  /** The command, file name, host or question text. Null when details are turned off. */
+  detail: z.string().max(240).nullable(),
+  /** Answer choices for multiple-choice questions (display only; answer on the Mac). */
+  options: z.array(z.string().max(40)).max(4),
+  askedAt: IsoTime,
+});
+export type Question = z.infer<typeof Question>;
+
 export const Session = z.object({
   /** Stable, opaque id. Never a raw Claude session id or path. */
   id: z.string().min(1).max(32),
@@ -85,6 +97,8 @@ export const Session = z.object({
   tokens: Tokens,
   context: Context,
   lastActivityAt: IsoTime.nullable(),
+  /** What it's waiting on you for, while it needs you. Optional so older services stay valid. */
+  question: Question.nullable().optional(),
 });
 export type Session = z.infer<typeof Session>;
 

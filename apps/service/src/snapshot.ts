@@ -14,7 +14,10 @@ export const MAX_SESSIONS = 64;
 export { compareSessions } from "@claudette/protocol";
 
 /** Apply Claudette-only pins and aliases, sort, cap. */
-export function applyPreferences(base: Snapshot, prefs: Pick<Preferences, "pinOrder" | "aliases">): Snapshot {
+export function applyPreferences(
+  base: Snapshot,
+  prefs: Pick<Preferences, "pinOrder" | "aliases"> & { questionText?: boolean },
+): Snapshot {
   const order = prefs.pinOrder;
   const sessions = base.sessions.map((s) => {
     const idx = order.indexOf(s.id);
@@ -24,6 +27,8 @@ export function applyPreferences(base: Snapshot, prefs: Pick<Preferences, "pinOr
       pinned: idx !== -1,
       pinOrder: idx === -1 ? null : idx,
       displayName: alias ? truncateChars(alias, 64) : s.displayName,
+      question:
+        s.question && !prefs.questionText ? { ...s.question, detail: null, options: [] } : (s.question ?? null),
     };
   });
   // Re-number pin order densely over the pins that are actually present.
@@ -51,6 +56,14 @@ export function deviceView(full: Snapshot): Snapshot {
         ...s.subagents,
         types: s.subagents.types.slice(0, 4).map((t) => truncateUtf8(t, 24)),
       },
+      question: s.question
+        ? {
+            ...s.question,
+            title: truncateUtf8(s.question.title, 40),
+            detail: s.question.detail === null ? null : truncateUtf8(s.question.detail, 160),
+            options: s.question.options.slice(0, 4).map((o) => truncateUtf8(o, 28)),
+          }
+        : null,
     })),
   };
 }
