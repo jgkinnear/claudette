@@ -239,11 +239,13 @@ void handle_serial_line(const char *line) {
         send_simple(NC_FACTORY_RESET);
     } else if (strcmp(line, "reboot") == 0) {
         send_simple(NC_REBOOT);
+    } else if (strcmp(line, "lcdtest") == 0) {
+        hal_lcd_test();
     } else if (strcmp(line, "touch") == 0) {
         hal_set_touch_log(!hal_touch_log_enabled());
         LOGI("touch", "logging %s", hal_touch_log_enabled() ? "on" : "off");
     } else {
-        LOGI("help", "commands: status, setup, reconnect, forget, factory-reset, reboot, touch");
+        LOGI("help", "commands: status, setup, reconnect, forget, factory-reset, reboot, touch, lcdtest");
     }
 }
 

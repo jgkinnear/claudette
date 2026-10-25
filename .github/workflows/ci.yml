@@ -58,11 +58,12 @@ jobs:
           path: ~/.platformio
           key: pio-${{ hashFiles('apps/firmware/platformio.ini') }}
       - run: pip install platformio==6.2.0
-      - run: pio run -d apps/firmware -e freenove-s3-4in
+      - run: pio run -d apps/firmware -e freenove-s3-4in -e freenove-s3-35in
       - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: node apps/firmware/scripts/merge.mjs freenove-s3-4in
+      - run: node apps/firmware/scripts/merge.mjs freenove-s3-35in
       - uses: actions/upload-artifact@v7
         with:
           name: claudette-firmware

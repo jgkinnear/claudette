@@ -1,3 +1,6 @@
+/* Freenove FNK0104S 4.0" (ST7796 + FT6336U via LovyanGFX). The 3.5" board lives in hal_display_qspi.cpp. */
+#if !defined(BOARD_FNK0104N)
+
 #include "hal_display.h"
 
 #include <Arduino.h>
@@ -206,5 +209,29 @@ bool hal_display_init(uint8_t brightness_pct) {
 
 void hal_set_brightness(uint8_t percent) { s_tft.setBrightness(pct_to_pwm(percent)); }
 
+/* Bring-up check that bypasses LVGL: solid colours at full brightness, then the backlight pin
+ * driven high directly. Tells "panel/SPI problem" apart from "backlight problem". Reboots after. */
+void hal_lcd_test(void) {
+    static const struct { uint16_t c; const char *name; } fills[] = {
+        {0xF800, "red"}, {0x07E0, "green"}, {0x001F, "blue"}, {0xFFFF, "white"}};
+    s_tft.waitDMA();
+    s_tft.setBrightness(255);
+    for (const auto &f : fills) {
+        LOGI("lcd", "test: %s at full brightness", f.name);
+        s_tft.fillScreen(f.c);
+        delay(2000);
+    }
+    LOGI("lcd", "test: backlight pin %d forced HIGH (no PWM)", LCD_PIN_BL);
+    pinMode(LCD_PIN_BL, OUTPUT);
+    digitalWrite(LCD_PIN_BL, BL_INVERT ? LOW : HIGH);
+    s_tft.fillScreen(0xFFFF);
+    delay(3000);
+    LOGI("lcd", "test: done, rebooting");
+    delay(100);
+    ESP.restart();
+}
+
 void hal_set_touch_log(bool on) { s_touch_log = on; }
 bool hal_touch_log_enabled(void) { return s_touch_log; }
+
+#endif /* !BOARD_FNK0104N */

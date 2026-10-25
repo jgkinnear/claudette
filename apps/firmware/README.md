@@ -2,7 +2,14 @@
 
 ESP32-S3 firmware for the Claudette desk display. It's built with PlatformIO, the Arduino core 2.0.17 and LVGL 9.6, and it draws with the shared UI in `packages/lvgl-ui`.
 
-Target board: **Freenove FNK0104S**, a 4.0" ESP32-S3 display. It has an ESP32-S3-WROOM N16R8 (16 MB flash, 8 MB octal PSRAM), an ST7796 320×480 SPI panel and an FT6336U touch controller.
+Two Freenove ESP32-S3 boards are supported. Both have an ESP32-S3-WROOM N16R8 (16 MB flash, 8 MB octal PSRAM) and a 320×480 portrait touchscreen, but different screen hardware, so each has its own build:
+
+| Board | Screen | Touch | PlatformIO env | pnpm |
+|---|---|---|---|---|
+| **FNK0104S 4.0"** | ST7796, SPI (LovyanGFX) | FT6336U @ 0x38 | `freenove-s3-4in` | `pnpm flash` |
+| **FNK0104N 3.5"** | ST77922, QSPI (`src/hal_display_qspi.cpp`) | controller @ 0x55 | `freenove-s3-35in` | `pnpm flash:3.5in` |
+
+If you flash the wrong one, the board still boots and logs normally, but the screen stays black. Use `lcdtest` over serial to check: it fills the screen red, green, blue, then white.
 
 ## Build, flash, monitor
 
@@ -41,18 +48,20 @@ If upload can't find the port, hold **BOOT**, tap **RST**, release BOOT, and run
 | Forget the Mac and pair again | Settings → "Pair with another Mac", or send `forget` over serial |
 | Factory reset (wipes Wi-Fi, pairing, preferences) | Settings → Factory reset, hold **BOOT** for 10 s, or send `factory-reset` over serial |
 
-Serial commands at 115200 baud, ending with Enter: `status`, `setup`, `reconnect`, `forget`, `factory-reset`, `reboot`, `touch` (logs touch coordinates). The log never contains the Wi-Fi password, the device token, the pairing secret or the pairing code.
+Serial commands at 115200 baud, ending with Enter: `status`, `setup`, `reconnect`, `forget`, `factory-reset`, `reboot`, `touch` (logs touch coordinates), `lcdtest` (colour fills, then reboot). The log never contains the Wi-Fi password, the device token, the pairing secret or the pairing code.
 
-## Pins (FNK0104S)
+## Pins
 
-| Function | GPIO |
-|---|---|
-| LCD SCLK / MOSI / MISO | 12 / 11 / 13 |
-| LCD CS / DC / RST | 10 / 46 / – |
-| Backlight (PWM, active high) | 45 |
-| Touch SDA / SCL | 16 / 15 |
-| Touch INT / RST (FT6336U @ 0x38) | 17 / 18 |
-| BOOT button | 0 |
+| Function | 4.0" FNK0104S | 3.5" FNK0104N |
+|---|---|---|
+| LCD bus | SPI: SCLK 12, MOSI 11, MISO 13 | QSPI: SCLK 12, D0–D3 11 / 13 / 14 / 9 |
+| LCD CS / DC / RST | 10 / 46 / – | 10 / – / – |
+| Backlight (PWM, active high) | 45 | 41 |
+| Touch SDA / SCL | 16 / 15 | 38 / 39 |
+| Touch INT / RST | 17 / 18 (FT6336U @ 0x38) | 47 / 48 (@ 0x55, 100 kHz) |
+| BOOT button | 0 | 0 |
+
+The 3.5" panel's init sequence and QSPI framing come from Freenove's own driver (`Freenove_ESP32_S3_Display`, `TFT_eSPI/ST77922*`).
 
 ## Another board
 

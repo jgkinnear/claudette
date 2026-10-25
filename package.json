@@ -10,8 +10,9 @@
   "scripts": {
     "build": "pnpm -r --filter \"./packages/*\" --filter @claudette/web --filter @claudette/service run build",
     "build:sim": "pnpm --filter @claudette/simulator build",
-    "build:firmware": "pnpm --filter @claudette/firmware build",
+    "build:firmware": "pnpm --filter @claudette/firmware build && pnpm --filter @claudette/firmware build:3.5in",
     "flash": "pnpm --filter @claudette/firmware flash",
+    "flash:3.5in": "pnpm --filter @claudette/firmware flash:3.5in",
     "monitor": "pnpm --filter @claudette/firmware monitor",
     "setup:mac": "pnpm build && node apps/service/dist/cli.js setup",
     "claudette": "node apps/service/dist/cli.js",

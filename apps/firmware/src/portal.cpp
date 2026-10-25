@@ -172,7 +172,14 @@ void send_current_page(const char *error) {
     send_page(error, g_settings.ssid, host, port);
 }
 
+/* Bring-up visibility: one line per request (path only — never query strings or bodies). */
+void log_request(const char *what) {
+    LOGI("setup", "http %s %s from %s -> %s", s_server->method() == HTTP_POST ? "POST" : "GET",
+         s_server->uri().c_str(), s_server->client().remoteIP().toString().c_str(), what);
+}
+
 void redirect_home(void) {
+    log_request("redirect");
     s_server->sendHeader("Location", String("http://") + kApIp.toString() + "/", true);
     s_server->sendHeader("Cache-Control", "no-store");
     s_server->send(302, "text/plain", "");
@@ -188,6 +195,7 @@ bool valid_host(const String &h) {
 }
 
 void handle_root(void) {
+    log_request("page");
     /* Captive-portal browsers ask for random hosts: bounce them to our IP. */
     if (s_server->hostHeader() != kApIp.toString()) {
         redirect_home();
@@ -287,10 +295,24 @@ bool portal_start(const char *ap_name, const char *ap_password) {
     /* Scan before the AP is up so nobody connected gets kicked by channel hops. */
     scan_networks();
 
-    WiFi.softAPConfig(kApIp, kApIp, kApMask);
     if (!WiFi.softAP(ap_name, ap_password, 1, 0, 4)) {
         LOGI("setup", "softAP start failed");
         return false;
+    }
+    delay(100);
+    if (!WiFi.softAPConfig(kApIp, kApIp, kApMask)) LOGI("setup", "softAPConfig failed");
+    LOGI("setup", "AP ip %s", WiFi.softAPIP().toString().c_str());
+
+    static bool events;
+    if (!events) {
+        events = true;
+        WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) { LOGI("setup", "phone joined the hotspot"); },
+                     ARDUINO_EVENT_WIFI_AP_STACONNECTED);
+        WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
+            LOGI("setup", "gave phone address %s", IPAddress(info.wifi_ap_staipassigned.ip.addr).toString().c_str());
+        }, ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED);
+        WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) { LOGI("setup", "phone left the hotspot"); },
+                     ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
     }
 
     s_dns = new DNSServer();

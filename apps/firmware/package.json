@@ -6,10 +6,12 @@
   "license": "MIT",
   "scripts": {
     "build": "pio run -e freenove-s3-4in",
+    "build:3.5in": "pio run -e freenove-s3-35in",
     "build:stub": "pio run -e stub",
     "flash": "pio run -e freenove-s3-4in -t upload",
+    "flash:3.5in": "pio run -e freenove-s3-35in -t upload",
     "monitor": "pio device monitor",
-    "merge": "node scripts/merge.mjs freenove-s3-4in",
+    "merge": "node scripts/merge.mjs freenove-s3-4in && node scripts/merge.mjs freenove-s3-35in",
     "clean": "pio run -t clean"
   }
 }

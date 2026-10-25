@@ -6,6 +6,30 @@
  */
 #pragma once
 
+/* ---- Board variants ---------------------------------------------------------
+ * Default: Freenove FNK0104S 4.0" (ST7796 over SPI, FT6336U touch).
+ * -DBOARD_FNK0104N: Freenove FNK0104N 3.5" (ST77922 over QSPI, touch controller at 0x55).
+ * Pins for the 3.5" come from Freenove's own driver (Freenove_ESP32_S3_Display). */
+#if defined(BOARD_FNK0104N)
+#define CLAUDETTE_BOARD_NAME "freenove-s3-35in"
+#define LCD_PIN_CS 10
+#define LCD_PIN_BL 41
+#define LCD_QSPI_SCLK 12
+#define LCD_QSPI_D0 11
+#define LCD_QSPI_D1 13
+#define LCD_QSPI_D2 14
+#define LCD_QSPI_D3 9
+#ifndef LCD_QSPI_FREQ
+#define LCD_QSPI_FREQ 80000000
+#endif
+#define TOUCH_PIN_SDA 38
+#define TOUCH_PIN_SCL 39
+#define TOUCH_PIN_INT 47
+#define TOUCH_PIN_RST 48
+#define TOUCH_I2C_ADDR 0x55
+#define TOUCH_I2C_FREQ 100000
+#endif
+
 #ifndef CLAUDETTE_FW_VERSION
 #define CLAUDETTE_FW_VERSION "0.1.0"
 #endif

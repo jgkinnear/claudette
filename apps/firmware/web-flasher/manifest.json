@@ -1,12 +1,17 @@
 {
-  "name": "Claudette",
+  "name": "Claudette (Freenove 4.0\" FNK0104S)",
   "version": "0.1.0",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 0,
   "builds": [
     {
       "chipFamily": "ESP32-S3",
-      "parts": [{ "path": "../dist/claudette-freenove-s3-4in.bin", "offset": 0 }]
+      "parts": [
+        {
+          "path": "../dist/claudette-freenove-s3-4in.bin",
+          "offset": 0
+        }
+      ]
     }
   ]
 }

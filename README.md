@@ -23,7 +23,7 @@ with demo data.
 
 | | |
 |---|---|
-| **Display** | [Freenove ESP32-S3 Display, 4.0" (FNK0104S)](https://docs.freenove.com/projects/fnk0104/en/latest/): ST7796 320×480 touchscreen, 16 MB flash, 8 MB PSRAM |
+| **Display** | A [Freenove ESP32-S3 Display](https://docs.freenove.com/projects/fnk0104/en/latest/) with a 320×480 touchscreen: the **4.0" (FNK0104S)** or the **3.5" (FNK0104N)**. Both have 16 MB flash and 8 MB PSRAM. Check which size you have: they need different firmware builds. |
 | **Cable** | A USB-C *data* cable, needed once for flashing. Afterwards any USB charger will do. |
 | **Computer** | A Mac with Claude Code installed, [Node.js 22+](https://nodejs.org) and [pnpm](https://pnpm.io) |
 | **Tools** | [PlatformIO Core](https://platformio.org/install/cli) (`brew install platformio`) |
@@ -54,11 +54,14 @@ The service runs from this folder, so keep the clone where it is. `pnpm claudett
 
 ### 3. Flash the display
 
-Plug the board in with the data cable, then:
+Plug the board in with the data cable, then run the command for your board:
 
 ```bash
-pnpm flash
+pnpm flash          # 4.0" FNK0104S
+pnpm flash:3.5in    # 3.5" FNK0104N
 ```
+
+Flashed the wrong one? Nothing breaks: the screen just stays black. Flash the other command.
 
 The first build downloads the ESP32 toolchain (a few hundred MB). If the port isn't found, hold **BOOT**, tap **RST**,
 and run it again. `pnpm monitor` shows the serial log.
