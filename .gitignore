@@ -25,3 +25,22 @@ __pycache__/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# PlatformIO / firmware
+.pio/
+apps/firmware/include/secrets.h
+
+# Emscripten / simulator build cache
+.cache/
+apps/simulator/public/wasm/
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# Never commit credentials or local Claudette state
+*.pem
+*.key
+devices.json
+claudette-state/

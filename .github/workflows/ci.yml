@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    name: Service, protocol & web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  simulator:
+    name: WebAssembly simulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 6.0.13
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @claudette/protocol build
+      - run: pnpm build:sim
+      - run: pnpm --filter @claudette/simulator exec playwright install --with-deps chromium
+      # Font rendering differs a little between macOS and Linux, so screenshots are
+      # only compared locally; CI just checks every scenario and interaction runs.
+      - run: pnpm --filter @claudette/simulator exec playwright test --update-snapshots
+
+  firmware:
+    name: ESP32-S3 firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v6
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('apps/firmware/platformio.ini') }}
+      - run: pip install platformio==6.2.0
+      - run: pio run -d apps/firmware -e freenove-s3-4in
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node apps/firmware/scripts/merge.mjs freenove-s3-4in
+      - uses: actions/upload-artifact@v7
+        with:
+          name: claudette-firmware
+          path: apps/firmware/dist/

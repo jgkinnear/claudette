@@ -1,0 +1,23 @@
+{
+  "name": "@claudette/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claudette's local settings and onboarding page (served by the companion service on loopback).",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "htm": "^3.1.1",
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@claudette/protocol": "workspace:*",
+    "vite": "^8.3.5",
+    "@claudette/lvgl-ui": "workspace:*"
+  }
+}

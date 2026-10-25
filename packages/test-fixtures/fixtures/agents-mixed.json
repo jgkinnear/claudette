@@ -1,0 +1,80 @@
+[
+  {
+    "cwd": "/Users/demo/code/teapot-api",
+    "kind": "interactive",
+    "name": "teapot api",
+    "pid": 41001,
+    "sessionId": "00000000-0000-4000-8000-00000000a001",
+    "startedAt": 1792918800000,
+    "status": "busy"
+  },
+  {
+    "cwd": "/Users/demo/code/garden-planner",
+    "kind": "interactive",
+    "pid": 41002,
+    "sessionId": "00000000-0000-4000-8000-00000000a002",
+    "startedAt": 1792918860000,
+    "status": "idle"
+  },
+  {
+    "cwd": "/Users/demo/code/lighthouse",
+    "kind": "interactive",
+    "name": "lighthouse docs",
+    "pid": 41003,
+    "sessionId": "00000000-0000-4000-8000-00000000a003",
+    "startedAt": 1792918920000,
+    "status": "waiting",
+    "waitingFor": "permission prompt"
+  },
+  {
+    "cwd": "/Users/demo/code/old-thing",
+    "kind": "interactive",
+    "name": "old thing",
+    "sessionId": "00000000-0000-4000-8000-00000000a004",
+    "startedAt": 1792915200000
+  },
+  {
+    "cwd": "/Users/demo/code/teapot-api",
+    "kind": "background",
+    "id": "bg-job-working",
+    "sessionId": "00000000-0000-4000-8000-00000000b001",
+    "state": "working",
+    "pid": 42001,
+    "status": "busy",
+    "startedAt": 1792919100000,
+    "name": "nightly lint sweep"
+  },
+  {
+    "cwd": "/Users/demo/code/lighthouse",
+    "kind": "background",
+    "id": "bg-job-blocked",
+    "sessionId": "00000000-0000-4000-8000-00000000b002",
+    "state": "blocked",
+    "pid": 42002,
+    "status": "waiting",
+    "waitingFor": "input needed",
+    "startedAt": 1792919160000
+  },
+  {
+    "cwd": "/Users/demo/code/garden-planner",
+    "kind": "background",
+    "id": "bg-job-done",
+    "sessionId": "00000000-0000-4000-8000-00000000b003",
+    "state": "done",
+    "startedAt": 1792919220000
+  },
+  {
+    "cwd": "/Users/demo/code/garden-planner",
+    "kind": "background",
+    "id": "bg-job-failed",
+    "state": "failed",
+    "startedAt": 1792919280000
+  },
+  {
+    "cwd": "/Users/demo/code/teapot-api",
+    "kind": "background",
+    "id": "bg-job-stopped",
+    "state": "stopped",
+    "startedAt": 1792919340000
+  }
+]

@@ -1,0 +1,39 @@
+{
+  "name": "@claudette/service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claudette companion service: watches Claude Code sessions and serves a tiny snapshot to your desk display.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "claudette": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run",
+    "dev": "tsx watch src/cli.ts start --mock tour --no-mdns",
+    "dev:real": "tsx watch src/cli.ts start",
+    "start": "node dist/cli.js start"
+  },
+  "dependencies": {
+    "@claudette/protocol": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@claudette/test-fixtures": "workspace:*",
+    "tsx": "^4.23.15"
+  }
+}

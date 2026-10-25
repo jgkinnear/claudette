@@ -1,0 +1,24 @@
+{
+  "name": "@claudette/test-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synthetic Claude Code fixtures (agents output, hook payloads, transcripts) for Claudette tests. All data is made up.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./fake-claude": "./src/fake-claude.mjs"
+  },
+  "files": [
+    "src",
+    "fixtures"
+  ],
+  "scripts": {
+    "test": "node -e \"import('./src/index.js').then(m=>{if(!m.agentsMixed.length)process.exit(1)})\""
+  }
+}

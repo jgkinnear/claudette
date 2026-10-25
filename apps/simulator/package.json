@@ -1,0 +1,24 @@
+{
+  "name": "@claudette/simulator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The real Claudette LVGL UI, compiled to WebAssembly, with demo scenarios.",
+  "scripts": {
+    "wasm": "node scripts/build-wasm.mjs",
+    "dev": "node scripts/build-wasm.mjs && vite",
+    "build": "node scripts/build-wasm.mjs && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test:visual": "playwright test"
+  },
+  "dependencies": {
+    "@claudette/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.5",
+    "@claudette/lvgl-ui": "workspace:*"
+  }
+}

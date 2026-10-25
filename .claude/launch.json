@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "simulator",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@claudette/simulator", "dev"],
+      "port": 5180
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "cwd": "/Users/demo/code/teapot-api",
+    "kind": "interactive",
+    "name": "teapot api",
+    "pid": 41001,
+    "sessionId": "00000000-0000-4000-8000-00000000a001",
+    "startedAt": 1792918800000,
+    "status": "busy"
+  },
+  {
+    "cwd": "/Users/demo/code/garden-planner",
+    "kind": "interactive",
+    "pid": 41002,
+    "sessionId": "00000000-0000-4000-8000-00000000a002",
+    "startedAt": 1792918860000,
+    "status": "idle"
+  },
+  {
+    "cwd": "/Users/demo/code/lighthouse",
+    "kind": "interactive",
+    "name": "lighthouse docs",
+    "pid": 41003,
+    "sessionId": "00000000-0000-4000-8000-00000000a003",
+    "startedAt": 1792918920000,
+    "status": "waiting",
+    "waitingFor": "permission prompt"
+  }
+]

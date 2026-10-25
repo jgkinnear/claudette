@@ -1,0 +1,9 @@
+{
+  "session_id": "00000000-0000-4000-8000-00000000a001",
+  "transcript_path": "/Users/demo/.claude/projects/-Users-demo-code-teapot-api/00000000-0000-4000-8000-00000000a001.jsonl",
+  "cwd": "/Users/demo/code/teapot-api",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "SECRET-CONTENT done"
+}

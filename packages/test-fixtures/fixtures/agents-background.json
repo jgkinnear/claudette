@@ -1,0 +1,46 @@
+[
+  {
+    "cwd": "/Users/demo/code/teapot-api",
+    "kind": "background",
+    "id": "bg-job-working",
+    "sessionId": "00000000-0000-4000-8000-00000000b001",
+    "state": "working",
+    "pid": 42001,
+    "status": "busy",
+    "startedAt": 1792919100000,
+    "name": "nightly lint sweep"
+  },
+  {
+    "cwd": "/Users/demo/code/lighthouse",
+    "kind": "background",
+    "id": "bg-job-blocked",
+    "sessionId": "00000000-0000-4000-8000-00000000b002",
+    "state": "blocked",
+    "pid": 42002,
+    "status": "waiting",
+    "waitingFor": "input needed",
+    "startedAt": 1792919160000
+  },
+  {
+    "cwd": "/Users/demo/code/garden-planner",
+    "kind": "background",
+    "id": "bg-job-done",
+    "sessionId": "00000000-0000-4000-8000-00000000b003",
+    "state": "done",
+    "startedAt": 1792919220000
+  },
+  {
+    "cwd": "/Users/demo/code/garden-planner",
+    "kind": "background",
+    "id": "bg-job-failed",
+    "state": "failed",
+    "startedAt": 1792919280000
+  },
+  {
+    "cwd": "/Users/demo/code/teapot-api",
+    "kind": "background",
+    "id": "bg-job-stopped",
+    "state": "stopped",
+    "startedAt": 1792919340000
+  }
+]

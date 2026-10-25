@@ -1,0 +1,13 @@
+{
+  "name": "claudette-ui",
+  "version": "0.1.0",
+  "description": "Claudette's shared LVGL UI (firmware + WebAssembly simulator)",
+  "license": "MIT",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include",
+    "flags": ["-I include", "-I src"]
+  }
+}

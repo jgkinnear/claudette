@@ -1,0 +1,15 @@
+{
+  "name": "@claudette/firmware",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claudette ESP32-S3 firmware (PlatformIO + Arduino + LVGL)",
+  "license": "MIT",
+  "scripts": {
+    "build": "pio run -e freenove-s3-4in",
+    "build:stub": "pio run -e stub",
+    "flash": "pio run -e freenove-s3-4in -t upload",
+    "monitor": "pio device monitor",
+    "merge": "node scripts/merge.mjs freenove-s3-4in",
+    "clean": "pio run -t clean"
+  }
+}

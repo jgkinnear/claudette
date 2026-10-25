@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Try Claudette</title>
+    <meta name="description" content="Claudette is a tiny desk companion for Claude Code. This is the real device UI, running in your browser." />
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <img class="logo" src="./mascot.png" alt="" width="48" height="48" />
+      <div>
+        <h1>Claudette</h1>
+        <p class="tagline">A tiny desk companion that keeps an eye on your Claude Code sessions.</p>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="device-wrap" aria-label="Simulated Claudette display">
+        <div class="device" id="device">
+          <canvas id="screen" width="320" height="480" tabindex="0" aria-label="Claudette screen. Tap sessions for details, long-press to pin."></canvas>
+        </div>
+        <div class="device-foot">
+          <span class="led" id="led"></span>
+          <span id="status">Waking up…</span>
+        </div>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button data-zoom="1">1×</button>
+          <button data-zoom="1.5" class="on">1.5×</button>
+          <button data-zoom="2">2×</button>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="mode" role="tablist">
+          <button id="mode-demo" class="on" role="tab">Demo scenarios</button>
+          <button id="mode-live" role="tab">Live from my Mac</button>
+        </div>
+
+        <div id="demo-pane">
+          <p class="hint">Made-up data, no Claude Code needed. Tap a session for details, long-press to pin, swipe between pages.</p>
+          <ul class="scenarios" id="scenarios"></ul>
+        </div>
+
+        <div id="live-pane" hidden>
+          <p class="hint" id="live-hint">
+            Shows real sessions from the Claudette service on this computer (<code>http://localhost:3333</code>).
+            Run <code>claudette setup</code> or <code>pnpm dev:service</code> first.
+          </p>
+        </div>
+
+        <details class="extras">
+          <summary>Display options</summary>
+          <label>Brightness <input type="range" id="brightness" min="5" max="100" value="80" /></label>
+          <label class="check"><input type="checkbox" id="motion" /> Reduce motion</label>
+        </details>
+
+        <p class="fine">
+          This is the actual LVGL code that runs on the ESP32, compiled to WebAssembly. It's not a mock-up.
+          Claudette is unofficial and not affiliated with Anthropic.
+        </p>
+      </aside>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

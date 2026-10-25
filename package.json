@@ -1,0 +1,31 @@
+{
+  "name": "claudette-monorepo",
+  "private": true,
+  "description": "A tiny desk companion that keeps an eye on your Claude Code sessions.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/*\" --filter @claudette/web --filter @claudette/service run build",
+    "build:sim": "pnpm --filter @claudette/simulator build",
+    "build:firmware": "pnpm --filter @claudette/firmware build",
+    "flash": "pnpm --filter @claudette/firmware flash",
+    "monitor": "pnpm --filter @claudette/firmware monitor",
+    "setup:mac": "pnpm build && node apps/service/dist/cli.js setup",
+    "claudette": "node apps/service/dist/cli.js",
+    "dev:sim": "pnpm --filter @claudette/simulator dev",
+    "dev:service": "pnpm --filter @claudette/service dev",
+    "dev:service:real": "pnpm --filter @claudette/service dev:real",
+    "dev:web": "pnpm --filter @claudette/web dev",
+    "test": "pnpm -r run test",
+    "test:visual": "pnpm --filter @claudette/simulator test:visual",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}
