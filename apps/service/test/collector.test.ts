@@ -22,6 +22,9 @@ describe("claude agents CLI adapter", () => {
     process.env.FAKE_CLAUDE_FAIL = "1";
     const c = new Collector({ claudePath: ensureFakeClaudeExecutable(), projectsDir: "/nonexistent", host: { id: "h", displayName: "Mac" }, salt: "x".repeat(16) });
     await c.poll();
+    expect(c.snapshot().collection.status).toBe("degraded"); // one failure: still starting up
+    await c.poll();
+    await c.poll();
     const s = c.snapshot();
     expect(s.collection.status).toBe("error");
     expect(s.collection.message).toMatch(/failed/);

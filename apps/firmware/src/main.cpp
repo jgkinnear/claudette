@@ -234,9 +234,10 @@ void print_status(void) {
          st.wifi_up ? st.ssid : "-", st.ip[0] ? st.ip : "-", st.rssi);
     LOGI("stat", "host=%s polling=%d fails=%u last_ok=%lus ago", st.host_label[0] ? st.host_label : "-",
          st.polling, st.fails, st.last_ok_ms ? (unsigned long)((millis() - st.last_ok_ms) / 1000) : 0ul);
-    LOGI("stat", "heap internal %u free (min %u), psram %u free, uptime %lus",
+    LOGI("stat", "heap internal %u free (min %u, largest %u), psram %u free, uptime %lus",
          (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
          (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
          (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM), (unsigned long)(millis() / 1000));
 }
 
@@ -333,8 +334,9 @@ void loop() {
     static uint32_t last_heap_log;
     if (now - last_heap_log >= 300000) {
         last_heap_log = now;
-        LOGI("sys", "heap internal %u (min %u), psram %u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        LOGI("sys", "heap internal %u (min %u, largest %u), psram %u", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     }
     if (s_bright_dirty && now - s_bright_changed_ms > 1500) {

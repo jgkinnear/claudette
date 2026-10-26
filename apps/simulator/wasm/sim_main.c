@@ -203,3 +203,7 @@ EMSCRIPTEN_KEEPALIVE const char *sim_debug_look(const char *seed)
     snprintf(out, sizeof(out), "%u,%u,%u,%u", l.body, l.headwear, l.accent, l.extra);
     return out;
 }
+
+#include <malloc.h>
+/** Debug helper: bytes currently allocated on the C heap (for leak checks). */
+EMSCRIPTEN_KEEPALIVE int sim_debug_heap(void) { return (int)mallinfo().uordblks; }

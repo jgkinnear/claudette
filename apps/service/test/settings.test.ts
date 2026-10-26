@@ -99,6 +99,8 @@ describe("setup / uninstall (temp dirs only)", () => {
     const xml = readFileSync(plist, "utf8");
     expect(xml).toContain("<string>/usr/local/bin/node</string>");
     expect(xml).toContain("<key>KeepAlive</key>");
+    // "Background" throttles the service and every `claude agents` it runs (5x slower, timeouts under load).
+    expect(xml).toMatch(/<key>ProcessType<\/key>\s*<string>Standard<\/string>/);
     expect(calls.some((c) => c.includes("bootstrap"))).toBe(true);
     const cfg = JSON.parse(readFileSync(join(e.CLAUDETTE_HOME, "config.json"), "utf8"));
     expect(cfg.claudePath).toBe(ensureFakeClaudeExecutable());

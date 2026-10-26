@@ -304,8 +304,10 @@ bool hal_display_init(uint8_t brightness_pct) {
     s_disp = lv_display_create(LCD_WIDTH, LCD_HEIGHT);
     lv_display_set_color_format(s_disp, LV_COLOR_FORMAT_RGB565);
     const size_t buf_bytes = (size_t)LCD_WIDTH * LVGL_BUF_LINES * 2;
+    /* One draw buffer: flush_cb sends synchronously, so a second buffer would never be drawn
+     * into while the first is on the wire. Internal RAM is tight and Wi-Fi needs the room. */
     void *buf1 = heap_caps_aligned_alloc(64, buf_bytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-    void *buf2 = heap_caps_aligned_alloc(64, buf_bytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    void *buf2 = nullptr;
     if (!buf1) {
         LOGI("lcd", "draw buffer alloc failed");
         return false;

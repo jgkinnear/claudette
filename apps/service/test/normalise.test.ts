@@ -59,6 +59,15 @@ describe("state normalisation", () => {
     expect(() => parseAgentsJson("{}")).toThrow();
   });
 
+  it("tolerates a stray notice around the list, and never echoes the output in errors", () => {
+    const list = JSON.stringify(agentsMixed);
+    expect(parseAgentsJson(`Update available: 9.9.9\n${list}\n`).length).toBe(agentsMixed.length);
+    const secret = '[{"cwd": "/Users/someone/secret-project", "name": "my private thing"';
+    expect(() => parseAgentsJson(secret)).toThrow(/isn't JSON \(\d+ bytes\)$/);
+    expect(() => parseAgentsJson(secret)).not.toThrow(/secret|private/);
+    expect(() => parseAgentsJson("  \n")).toThrow(/\(nothing\)/);
+  });
+
   it("all fixture rows normalise with unique ids", () => {
     const ids = agentsMixed.map((a) => normalise(a, SALT)!.id);
     expect(new Set(ids).size).toBe(agentsMixed.length);

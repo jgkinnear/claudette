@@ -79,6 +79,9 @@ export class Collector implements DataSource {
   private polls = 0;
   private lastOkAt: number | null = null;
   private lastError: { message: string; kind: string; at: number } | null = null;
+  /** Failed polls in a row. One-off hiccups (a slow or garbled `claude agents`) aren't worth showing. */
+  private failStreak = 0;
+  private warned: string | null = null;
   private readonly now: () => number;
   private readonly log: Logger;
   private readonly intervalMs: number;
@@ -134,21 +137,37 @@ export class Collector implements DataSource {
     return runAgentsCli(this.opts.claudePath);
   }
 
+  /** Show the error once it's more than a hiccup: no CLI at all, or three failures in a row. */
+  private errorVisible(): boolean {
+    return !!this.lastError && (this.lastError.kind === "missing" || this.failStreak >= 3);
+  }
+
   /** One poll cycle. Never throws. */
   async poll(): Promise<void> {
     if (this.polling) return;
     this.polling = true;
     try {
       let rows: RawAgent[];
+      const began = Date.now();
       try {
         rows = await this.fetch();
+        const took = Date.now() - began;
+        if (took > 5000) this.log.info(`collector: \`claude agents\` was slow (${(took / 1000).toFixed(1)} s)`);
       } catch (err) {
         const e = err instanceof AgentsCliError ? err : new AgentsCliError("Couldn't read Claude sessions", "failed");
-        if (!this.lastError || this.lastError.message !== e.message) this.log.warn(`collector: ${e.message}`);
+        this.failStreak++;
         this.lastError = { message: e.message, kind: e.kind, at: this.now() };
+        if (!this.errorVisible()) {
+          this.log.debug(`collector: ${e.message} (keeping the last good data)`);
+        } else if (this.warned !== e.message) {
+          this.warned = e.message;
+          this.log.warn(`collector: ${e.message}${this.failStreak > 1 ? ` (${this.failStreak} polls in a row)` : ""}`);
+        }
         return;
       }
-      if (this.lastError) this.log.info("collector: Claude sessions readable again");
+      if (this.warned) this.log.info("collector: Claude sessions readable again");
+      this.warned = null;
+      this.failStreak = 0;
       this.lastError = null;
       this.ingest(rows);
       this.lastOkAt = this.now();
@@ -325,10 +344,10 @@ export class Collector implements DataSource {
     }
     let status: Snapshot["collection"]["status"] = "healthy";
     let message: string | null = null;
-    if (this.lastError) {
+    if (this.errorVisible()) {
       status = "error";
-      message = this.lastError.message;
-    } else if (this.polls === 0) {
+      message = this.lastError!.message;
+    } else if (this.polls === 0 || this.lastOkAt === null) {
       status = "degraded";
       message = "Starting up…";
     } else if (this.lastOkAt !== null && now - this.lastOkAt > this.intervalMs * 4) {

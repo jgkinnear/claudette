@@ -118,7 +118,7 @@ export async function setup(opts: SetupOptions, io: SetupIO): Promise<SetupResul
   say("    and hooks are kept, and a backup is made first.");
   if (platform === "darwin") say(`  • installs a LaunchAgent so it starts when you log in (no sudo)`);
   say(`  • listens on port ${port} on your local network so your paired Claudette display can read the dashboard`);
-  say("Nothing is sent to the internet. `claudette uninstall` removes only Claudette's own changes.");
+  say("Nothing is sent to the internet. `npx get-claudette uninstall` removes only Claudette's own changes.");
   say("");
   if (!opts.yes && !(await io.confirm("Continue?", true))) {
     say("No changes made. Bye for now ✿");

@@ -82,7 +82,7 @@ await Promise.all(Array.from({ length: workers }, worker));
 const exported = [
   "sim_init", "sim_tick", "sim_pointer", "sim_framebuffer", "sim_set_snapshot", "sim_set_link", "sim_set_device",
   "sim_show_dashboard", "sim_show_wifi", "sim_show_progress", "sim_show_hosts", "sim_show_pairing", "sim_show_message",
-  "sim_debug_hit", "sim_debug_look", "malloc", "free",
+  "sim_debug_hit", "sim_debug_look", "sim_debug_heap", "malloc", "free",
 ].map((s) => `_${s}`);
 await run("emcc", [
   release ? "-O2" : "-O0",

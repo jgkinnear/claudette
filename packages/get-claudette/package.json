@@ -1,6 +1,6 @@
 {
   "name": "get-claudette",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claudette: a tiny desk companion for Claude Code. The Mac companion service, settings page and live simulator. Unofficial; not affiliated with Anthropic.",
   "type": "module",
   "bin": {

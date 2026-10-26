@@ -39,7 +39,16 @@ export function parseAgentsJson(stdout: string): RawAgent[] {
   try {
     data = JSON.parse(stdout);
   } catch {
-    throw new AgentsCliError("claude agents printed something that isn't JSON", "parse");
+    // Tolerate a stray notice printed around the list; never log the output itself (it has paths and names).
+    const start = stdout.indexOf("[");
+    const end = stdout.lastIndexOf("]");
+    try {
+      if (start < 0 || end < start) throw new Error("no list");
+      data = JSON.parse(stdout.slice(start, end + 1));
+    } catch {
+      const what = stdout.trim() ? `${stdout.length} bytes` : "nothing";
+      throw new AgentsCliError(`claude agents printed something that isn't JSON (${what})`, "parse");
+    }
   }
   if (!Array.isArray(data)) throw new AgentsCliError("claude agents didn't return a list", "parse");
   const out: RawAgent[] = [];
@@ -51,7 +60,7 @@ export function parseAgentsJson(stdout: string): RawAgent[] {
 }
 
 /** Run `claude agents --json --all` without a shell. */
-export function runAgentsCli(claudePath: string, timeoutMs = 4000): Promise<RawAgent[]> {
+export function runAgentsCli(claudePath: string, timeoutMs = 15_000): Promise<RawAgent[]> {
   return new Promise((resolve, reject) => {
     execFile(
       claudePath,

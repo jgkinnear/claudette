@@ -15,6 +15,7 @@
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <esp_mac.h>
+#include <esp_system.h>
 #include <string.h>
 #include <strings.h>
 
@@ -700,6 +701,9 @@ void revoked(void) {
     set_state(S_CHECK_HOST);
 }
 
+/* Below this (largest free internal block) new TCP connections start failing. */
+const size_t kLowInternalRam = 12 * 1024;
+
 void run_running(void) {
     struct PollingGuard {
         PollingGuard() { bridge_set_polling(true); }
@@ -772,6 +776,17 @@ void run_running(void) {
                 if (!dashboard_shown && millis() - since >= CLAUDETTE_OFFLINE_AFTER_MS) {
                     ui_dashboard(); /* shows "Sleeping" with the link state */
                     dashboard_shown = true;
+                }
+                /* Safety net: if polls keep failing while Wi-Fi is up and internal RAM (which the
+                 * Wi-Fi/TCP stack needs) has run low, start fresh. The display holds no state worth
+                 * keeping, and it's back on the dashboard a few seconds after the restart. */
+                if (fails % 10 == 0 && wifi_up() &&
+                    heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < kLowInternalRam) {
+                    LOGI("sys", "polls failing with internal RAM low (%u free, largest %u): restarting",
+                         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+                    delay(200);
+                    esp_restart();
                 }
             }
 

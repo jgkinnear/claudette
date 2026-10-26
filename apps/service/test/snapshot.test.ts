@@ -60,6 +60,11 @@ describe("snapshot", () => {
     await c.poll();
     fail = true;
     await c.poll();
+    // One hiccup keeps the last good data and stays quiet...
+    expect(c.snapshot().collection.status).toBe("healthy");
+    await c.poll();
+    await c.poll();
+    // ...three in a row is a real problem.
     const snap = c.snapshot();
     expect(snap.collection.status).toBe("error");
     expect(snap.collection.message).toBeTruthy();

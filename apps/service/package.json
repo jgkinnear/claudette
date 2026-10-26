@@ -1,6 +1,6 @@
 {
   "name": "@claudette/service",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Claudette companion service: watches Claude Code sessions and serves a tiny snapshot to your desk display.",
   "license": "MIT",
