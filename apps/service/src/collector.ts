@@ -32,6 +32,8 @@ interface Tracked {
   stateSince: number | null;
   idleSince: number | null;
   lastPollSeen: number;
+  /** When it dropped off `claude agents` (the app closed it), or null while it's listed. */
+  goneAt: number | null;
 }
 
 export interface CollectorOptions {
@@ -56,6 +58,10 @@ export interface CollectorOptions {
   };
   /** Hide finished/failed/stopped sessions inactive for longer than this (default 24 h). */
   retentionMs?: number;
+  /** Sessions that dropped off `claude agents` stay this long as "stopped" (default 4 h)... */
+  recentMs?: number;
+  /** ...but only to fill the list up to this many sessions (default 6). Running and pinned always show. */
+  fillTo?: number;
   log?: Logger;
   now?: () => number;
   /** For tests: replace the CLI call. */
@@ -201,6 +207,7 @@ export class Collector implements DataSource {
           stateSince: initial ? null : now,
           idleSince: norm.state === "ready" ? now : null,
           lastPollSeen: now,
+          goneAt: null,
         });
       } else {
         if (prev.norm.state !== norm.state) {
@@ -209,6 +216,7 @@ export class Collector implements DataSource {
         }
         prev.norm = norm;
         prev.lastPollSeen = now;
+        prev.goneAt = null;
       }
       const t = this.tracked.get(norm.id)!;
       if (norm.claudeSessionId) {
@@ -223,13 +231,12 @@ export class Collector implements DataSource {
           this.subagents.clearSession(t.norm.claudeSessionId);
           this.limits.forget(t.norm.claudeSessionId);
         }
-        if (this.opts.pins && this.opts.isPinned?.(id)) {
-          // Pinned: keep it on the list, honestly marked as not running.
-          if (t.norm.state !== "stopped") t.stateSince = now;
-          t.norm = { ...t.norm, state: "stopped", needsAttentionReason: null, alive: false };
-          continue;
-        }
-        this.tracked.delete(id);
+        // Keep it, honestly marked as not running: pinned ones for good, others for a while (see snapshot()).
+        if (t.norm.state !== "stopped") t.stateSince = now;
+        t.norm = { ...t.norm, state: "stopped", needsAttentionReason: null, alive: false };
+        if (this.opts.pins && this.opts.isPinned?.(id)) continue;
+        t.goneAt ??= now;
+        if (now - t.goneAt > (this.opts.recentMs ?? 4 * 3600_000)) this.tracked.delete(id);
       }
     }
     this.syncPins(seen, now);
@@ -270,6 +277,7 @@ export class Collector implements DataSource {
           stateSince: null,
           idleSince: null,
           lastPollSeen: now,
+          goneAt: now,
         });
       }
     }
@@ -335,12 +343,23 @@ export class Collector implements DataSource {
     const hooks = this.hooksInstalled();
     const retention = this.opts.retentionMs ?? 24 * 3600_000;
     const sessions: Session[] = [];
+    const recent: Tracked[] = [];
     for (const t of this.tracked.values()) {
+      if (t.goneAt !== null && !this.opts.isPinned?.(t.norm.id)) {
+        recent.push(t);
+        continue;
+      }
       const s = this.buildSession(t, hooks);
       const terminal = s.state === "stopped" || s.state === "failed" || (s.state === "ready" && t.norm.kind === "background") || (s.state === "ready" && !t.norm.alive);
       const last = s.lastActivityAt ? Date.parse(s.lastActivityAt) : 0;
       if (terminal && now - last > retention && !this.opts.isPinned?.(s.id)) continue;
       sessions.push(s);
+    }
+    // Top up with the sessions the app closed most recently, so a short list isn't left bare.
+    const room = (this.opts.fillTo ?? 6) - sessions.length;
+    if (room > 0) {
+      recent.sort((a, b) => b.goneAt! - a.goneAt!);
+      for (const t of recent.slice(0, room)) sessions.push(this.buildSession(t, hooks));
     }
     let status: Snapshot["collection"]["status"] = "healthy";
     let message: string | null = null;

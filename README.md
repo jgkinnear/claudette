@@ -88,7 +88,9 @@ Wi-Fi), enter your Mac's address manually in the setup page. Recovery, pins and 
 - **What's listed:** every Claude Code session that's running right now, plus anything you've pinned. Anything that
   **needs you** (a permission prompt or a question) always comes first, with a pulsing amber card. Pinned sessions are
   next, in your order. They stay listed (as *Stopped*) even after Claude stops their process. Then come working
-  sessions, then the rest, most recent first. Your conversation history isn't listed unless it's running or pinned.
+  sessions, then the rest, most recent first. If that leaves fewer than 6, sessions closed in the last 4 hours fill
+  the gaps (as *Stopped*, newest first). The Claude desktop app only keeps a few sessions running at once, so this
+  keeps the ones you just used in view. Older history isn't listed unless you pin it.
 - **List or tiles:** the button next to the gear switches between big cards plus a compact list, and a grid of
   equal tiles. The display remembers your choice.
 - **Portrait or landscape:** a quick press of the board's **BOOT** button (or Settings → Screen → Rotate) turns the UI a

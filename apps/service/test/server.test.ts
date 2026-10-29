@@ -330,10 +330,12 @@ describe("hook intake", () => {
   it("clears subagents when the parent session disappears", async () => {
     const h = { ...json, "X-Claudette-Hook": secret() };
     await http(t.port, "POST", "/hooks/claude", { headers: h, body: hooks.subagentStart(ids.busy, "a1") });
+    const busy = async () =>
+      ((await http(t.port, "GET", "/admin/api/status")).body as Snapshot).sessions.find((s) => s.displayName === "teapot api")?.state;
     rows = [agents.interactiveIdle];
-    await until(async () => ((await http(t.port, "GET", "/admin/api/status")).body as Snapshot).sessions.length === 1);
+    await until(async () => (await busy()) === "stopped"); // closed by the app: kept for a while as stopped
     rows = [agents.interactiveBusy, agents.interactiveIdle];
-    await until(async () => ((await http(t.port, "GET", "/admin/api/status")).body as Snapshot).sessions.length === 2);
+    await until(async () => (await busy()) === "working");
     const snap = (await http(t.port, "GET", "/admin/api/status")).body as Snapshot;
     expect(snap.sessions.find((s) => s.displayName === "teapot api")!.subagents.active).toBe(0);
   });

@@ -6,9 +6,13 @@ import type { RememberedSession } from "../src/store.js";
 type Row = Record<string, unknown>;
 
 /** A collector wired to an in-memory preferences store, like service.ts does with the real one. */
-function setup(prefs = { pinOrder: [] as string[], remembered: {} as Record<string, RememberedSession> }) {
+function setup(
+  prefs = { pinOrder: [] as string[], remembered: {} as Record<string, RememberedSession> },
+  extra: Partial<ConstructorParameters<typeof Collector>[0]> = { fillTo: 0 }, // no recent top-up unless a test asks
+) {
   let rows: Row[] = [];
   const c = new Collector({
+    ...extra,
     claudePath: null,
     projectsDir: "/nonexistent",
     host: { id: "h", displayName: "Mac" },
@@ -87,6 +91,60 @@ describe("pinned sessions", () => {
     await c.poll();
     expect(view()).toHaveLength(0);
     expect(prefs.remembered).toEqual({});
+  });
+});
+
+describe("recently closed sessions", () => {
+  it("fill the list up to 6 with sessions closed in the last 4 hours, newest first; running ones always show", async () => {
+    let now = 1_800_000_000_000;
+    const { c, view, setRows } = setup(undefined, { now: () => now });
+    const names = ["One", "Two", "Three", "Four", "Five", "Six", "Seven"];
+    // Seven sessions run, then the app closes them one at a time, a minute apart.
+    setRows(names.map((n, i) => live(`s${i}`, n)));
+    await c.poll();
+    for (let i = 0; i < names.length; i++) {
+      now += 60_000;
+      setRows(names.slice(i + 1).map((n, k) => live(`s${i + 1 + k}`, n)));
+      await c.poll();
+    }
+    // Nothing running now: the six most recently closed show, newest first, as stopped.
+    expect(view().map((s) => s.displayName)).toEqual(["Seven", "Six", "Five", "Four", "Three", "Two"]);
+    expect(view().every((s) => s.state === "stopped")).toBe(true);
+
+    // Four running sessions leave room for two recent ones.
+    setRows(["A", "B", "C", "D"].map((n) => live(`r${n}`, n, "busy")));
+    await c.poll();
+    const names4 = view().map((s) => s.displayName);
+    expect(names4.slice(0, 4).sort()).toEqual(["A", "B", "C", "D"]); // running first (same age: any order)
+    expect(names4.slice(4)).toEqual(["Seven", "Six"]); // then the most recently closed
+
+    // Eight running: no room, and running ones are never cut to make space.
+    setRows("ABCDEFGH".split("").map((n) => live(`r${n}`, n, "busy")));
+    await c.poll();
+    expect(view()).toHaveLength(8);
+    expect(view().every((s) => s.state === "working")).toBe(true);
+
+    // After four hours, the closed ones are gone for good.
+    setRows([]);
+    now += 4 * 3600_000 + 60_000;
+    await c.poll();
+    expect(view()).toHaveLength(6); // the eight just closed fill the list; the older ones expired
+    expect(view().every((s) => "ABCDEFGH".includes(s.displayName) && s.state === "stopped")).toBe(true);
+    now += 4 * 3600_000 + 60_000;
+    await c.poll();
+    expect(view()).toHaveLength(0);
+  });
+
+  it("come back as running when the app reopens them", async () => {
+    const { c, view, setRows } = setup(undefined, {});
+    setRows([live("a", "Reopened", "busy")]);
+    await c.poll();
+    setRows([]);
+    await c.poll();
+    expect(view()[0]).toMatchObject({ displayName: "Reopened", state: "stopped" });
+    setRows([live("a", "Reopened", "busy")]);
+    await c.poll();
+    expect(view()[0]).toMatchObject({ displayName: "Reopened", state: "working" });
   });
 });
 
