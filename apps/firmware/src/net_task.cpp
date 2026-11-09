@@ -728,7 +728,10 @@ void run_running(void) {
             next = millis();
         }
         if ((int32_t)(millis() - next) >= 0) {
-            if (wifi_up() && (force_resolve || (fails >= 4 && millis() - last_resolve > 30000))) {
+            /* A failed poll often means the Mac got a new address (macOS rotates its private Wi-Fi
+             * address, and with it the DHCP lease), so look it up again straight away, then at most
+             * every 15 s while polls keep failing. */
+            if (wifi_up() && (force_resolve || (fails >= 1 && millis() - last_resolve > 15000))) {
                 last_resolve = millis();
                 force_resolve = false;
                 rediscover();
